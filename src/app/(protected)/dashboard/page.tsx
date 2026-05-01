@@ -4,6 +4,7 @@ import { authOptions } from "@/auth";
 import { filterRowsByWilayah } from "@/lib/rbac";
 import { getRows } from "@/lib/sheets";
 import Link from "next/link";
+import DashboardComplianceCards from "@/components/DashboardComplianceCards";
 
 function isSameMonth(d: Date, ref: Date) {
   return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
@@ -96,6 +97,9 @@ export default async function DashboardPage() {
       return db - da;
     })
     .slice(0, 5);
+
+  const initYear = now.getFullYear();
+  const initSemester = (now.getMonth() < 6 ? 1 : 2) as 1 | 2;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -296,6 +300,8 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <DashboardComplianceCards initialYear={initYear} initialSemester={initSemester} />
     </div>
   );
 }
