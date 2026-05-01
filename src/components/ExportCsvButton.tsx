@@ -2,10 +2,16 @@
 
 import { Download } from "lucide-react";
 
-function toCsv(rows: Record<string, any>[]) {
-  const headers = Array.from(
-    new Set(rows.flatMap((r) => Object.keys(r).filter((k) => k !== "_rowNumber")))
-  );
+export type CsvColumn = {
+  key: string;
+  label: string;
+  value?: (row: Record<string, any>) => any;
+};
+
+function toCsv(rows: Record<string, any>[], columns?: CsvColumn[]) {
+  const headers = columns?.length
+    ? columns.map((c) => c.label)
+    : Array.from(new Set(rows.flatMap((r) => Object.keys(r).filter((k) => k !== "_rowNumber"))));
 
   const escape = (v: any) => {
     const s = v == null ? "" : String(v);
@@ -16,7 +22,14 @@ function toCsv(rows: Record<string, any>[]) {
 
   const lines = [
     headers.map(escape).join(","),
-    ...rows.map((r) => headers.map((h) => escape(r[h])).join(",")),
+    ...rows.map((r) => {
+      if (columns?.length) {
+        return columns
+          .map((c) => escape(c.value ? c.value(r) : r[c.key]))
+          .join(",");
+      }
+      return headers.map((h) => escape((r as any)[h])).join(",");
+    }),
   ];
   return lines.join("\n");
 }
@@ -24,10 +37,12 @@ function toCsv(rows: Record<string, any>[]) {
 export default function ExportCsvButton({
   rows,
   fileName,
+  columns,
   className = "btn btn-outline btn-sm",
 }: {
   rows: Record<string, any>[];
   fileName: string;
+  columns?: CsvColumn[];
   className?: string;
 }) {
   return (
@@ -35,7 +50,7 @@ export default function ExportCsvButton({
       className={className}
       type="button"
       onClick={() => {
-        const csv = toCsv(rows);
+        const csv = toCsv(rows, columns);
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -51,5 +66,4 @@ export default function ExportCsvButton({
     </button>
   );
 }
-
 

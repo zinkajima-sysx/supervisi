@@ -18,7 +18,7 @@ import {
   ChevronRight
 } from "lucide-react";
 
-import ExportCsvButton from "@/components/ExportCsvButton";
+import ExportCsvButton, { type CsvColumn } from "@/components/ExportCsvButton";
 
 type ApiResponse = { rows: Record<string, any>[] };
 
@@ -80,6 +80,96 @@ export default function LaporanP3kPage() {
     });
   }, [rows, isKepala, daop, upt, tanggal]);
 
+  const exportColumns = useMemo<CsvColumn[]>(() => {
+    const pick = (r: Record<string, any>, keys: string[]) => {
+      for (const k of keys) {
+        const v = String(r[k] ?? "").trim();
+        if (v) return v;
+      }
+      return "";
+    };
+
+    const itemKeys = [
+      { key: "kasa_steril", label: "KASA STERIL" },
+      { key: "perban_5cm", label: "PERBAN 5 CM" },
+      { key: "perban_10cm", label: "PERBAN 10 CM" },
+      { key: "perban_1,2cm", label: "PERBAN 1,2 CM" },
+      { key: "plester_cepat", label: "PLESTER CEPAT" },
+      { key: "kapas_25gram", label: "KAPAS 25 GRAM" },
+      { key: "kain_mitela", label: "KAIN MITELA" },
+      { key: "gunting", label: "GUNTING" },
+      { key: "peniti", label: "PENITI" },
+      { key: "sarung_tangan_disposible", label: "SARUNG TANGAN DISPOSIBLE" },
+      { key: "bidai", label: "BIDAI" },
+      { key: "masker", label: "MASKER" },
+      { key: "pinset", label: "PINSET" },
+      { key: "lampu_senter", label: "LAMPU SENTER" },
+      { key: "gelas_cucimata", label: "GELAS CUCI MATA" },
+      { key: "kantong_plastik_bersih", label: "KANTONG PLASTIK BERSIH" },
+      { key: "aquades_100ml", label: "AQUADES 100 ML" },
+      { key: "betadine_60ml", label: "BETADINE 60 ML" },
+      { key: "alkohol_70", label: "ALKOHOL 70%" },
+      { key: "buku_panduan_p3k", label: "BUKU PANDUAN P3K" },
+      { key: "buku_catatan", label: "BUKU CATATAN" },
+      { key: "buku_daftar_isikotak", label: "BUKU DAFTAR ISI KOTAK" },
+      { key: "kotak_p3k", label: "KOTAK P3K" },
+    ] satisfies Array<{ key: string; label: string }>;
+
+    return [
+      {
+        key: "tanggal_supervisi",
+        label: "TANGGAL SUPERVISI",
+        value: (r) => String(r.tanggal_supervisi ?? r.timestamp ?? "").slice(0, 10),
+      },
+      {
+        key: "petugas_nama",
+        label: "NAMA PETUGAS",
+        value: (r) =>
+          pick(r, ["petugas_nama", "submitter_nama", "submitter_username", "id"]),
+      },
+      {
+        key: "upt",
+        label: "UPT",
+        value: (r) => pick(r, ["upt", "nama_upt"]),
+      },
+      {
+        key: "unit_kerja",
+        label: "NAMA UNIT KERJA",
+        value: (r) => pick(r, ["unit_kerja", "nama_unit_kerja"]),
+      },
+      {
+        key: "kelas_kotak",
+        label: "KELAS KOTAK",
+        value: (r) => pick(r, ["kelas_kotak"]),
+      },
+      {
+        key: "kondisi_kotak_p3k",
+        label: "KONDISI KOTAK",
+        value: (r) => pick(r, ["kondisi_kotak_p3k", "kondisi_kotak"]),
+      },
+      ...itemKeys.map((c) => ({
+        key: c.key,
+        label: c.label,
+        value: (r: Record<string, any>) => pick(r, [c.key]),
+      })),
+      {
+        key: "hasil_pemeriksaan",
+        label: "HASIL PEMERIKSAAN",
+        value: (r) => pick(r, ["hasil_pemeriksaan"]),
+      },
+      {
+        key: "keterangan",
+        label: "KETERANGAN",
+        value: (r) => pick(r, ["keterangan"]),
+      },
+      {
+        key: "tindak_lanjut",
+        label: "TINDAK LANJUT",
+        value: (r) => pick(r, ["tindak_lanjut"]),
+      },
+    ];
+  }, []);
+
   useEffect(() => {
     setPageIndex(0);
   }, [daop, upt, tanggal, isKepala]);
@@ -120,6 +210,7 @@ export default function LaporanP3kPage() {
           <ExportCsvButton 
             rows={filtered} 
             fileName="laporan-p3k.csv" 
+            columns={exportColumns}
             className="btn btn-primary rounded-xl shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
           />
         </div>
