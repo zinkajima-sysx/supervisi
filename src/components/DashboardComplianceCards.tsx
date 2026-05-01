@@ -222,55 +222,102 @@ export default function DashboardComplianceCards({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-        {(loading ? Array.from({ length: 6 }) : data?.groups ?? []).map((g: any, idx: number) => (
-          <div key={g?.groupId ?? `sk-${idx}`} className="glass-card p-6 overflow-hidden relative">
-            <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
-            <div className="relative">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/45">
-                    Card {idx + 1}
+        {(loading ? Array.from({ length: 6 }) : data?.groups ?? []).map((g: any, idx: number) => {
+          const units: UnitStats[] = (loading
+            ? Array.from({ length: 6 }).map((_, i) => ({
+                unit: `Unit ${i + 1}`,
+                p3k: { lengkap: 0, tidakLengkap: 0 },
+                apd: { lengkap: 0, tidakLengkap: 0 },
+              }))
+            : (g.units ?? [])) as UnitStats[];
+
+          return (
+            <div key={g?.groupId ?? `sk-${idx}`} className="glass-card overflow-hidden">
+              <div className="px-6 pt-5 pb-4 border-b border-base-content/5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/45">
+                      Card {idx + 1}
+                    </div>
+                    <div className="mt-1 text-base font-black tracking-tight text-base-content truncate">
+                      {loading ? "Memuat…" : String(g.groupLabel ?? "Unit Kerja")}
+                    </div>
                   </div>
-                  <div className="mt-1 text-lg font-black tracking-tight text-base-content truncate">
-                    {loading ? "Memuat…" : String(g.groupLabel ?? "Unit")}
-                  </div>
-                </div>
-                <div className="h-10 w-10 rounded-2xl bg-base-200/60 border border-base-content/10 flex items-center justify-center text-primary">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.25">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 4v6c0 5-3 9-8 12-5-3-8-7-8-12V7l8-4z" />
-                  </svg>
+                  <div className="badge badge-outline badge-sm opacity-60">{year} • S{semester}</div>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-3">
-                {(loading ? Array.from({ length: 6 }) : g.units ?? []).map((u: any, uIdx: number) => (
-                  <div
-                    key={u?.unit ?? `u-${uIdx}`}
-                    className="rounded-2xl border border-base-content/10 bg-base-200/30 px-4 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 text-sm font-black text-base-content truncate">
-                        {loading ? `Unit ${uIdx + 1}` : String(u.unit)}
-                      </div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/40">
-                        {loading ? "" : ""}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Badge label="P3K L" value={loading ? 0 : Number(u.p3k?.lengkap ?? 0)} variant="ok" />
-                      <Badge label="P3K TL" value={loading ? 0 : Number(u.p3k?.tidakLengkap ?? 0)} variant="bad" />
-                      <Badge label="APD L" value={loading ? 0 : Number(u.apd?.lengkap ?? 0)} variant="ok" />
-                      <Badge label="APD TL" value={loading ? 0 : Number(u.apd?.tidakLengkap ?? 0)} variant="bad" />
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="table w-full">
+                  <thead>
+                    <tr>
+                      <th
+                        rowSpan={2}
+                        className="w-[38%] bg-base-100/50 align-middle text-left text-[10px] font-black uppercase tracking-[0.22em] text-base-content/70"
+                      >
+                        Unit Kerja
+                      </th>
+                      <th
+                        colSpan={2}
+                        className="bg-warning/10 text-center text-[10px] font-black uppercase tracking-[0.22em] text-warning/90"
+                      >
+                        P3K
+                      </th>
+                      <th
+                        colSpan={2}
+                        className="bg-info/10 text-center text-[10px] font-black uppercase tracking-[0.22em] text-info/90"
+                      >
+                        APD
+                      </th>
+                    </tr>
+                    <tr>
+                      <th className="bg-warning/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
+                        Lengkap
+                      </th>
+                      <th className="bg-warning/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
+                        Tdk Lengkap
+                      </th>
+                      <th className="bg-info/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
+                        Lengkap
+                      </th>
+                      <th className="bg-info/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
+                        Tdk Lengkap
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {units.map((u, uIdx) => (
+                      <tr key={`${u.unit}-${uIdx}`} className="hover:bg-primary/5 transition-colors">
+                        <td className="text-sm font-semibold text-base-content truncate">{u.unit}</td>
+                        <td className="text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-success/10 text-success border border-success/15 px-2 py-1 text-xs font-black tabular-nums">
+                            {u.p3k.lengkap}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-error/10 text-error border border-error/15 px-2 py-1 text-xs font-black tabular-nums">
+                            {u.p3k.tidakLengkap}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-success/10 text-success border border-success/15 px-2 py-1 text-xs font-black tabular-nums">
+                            {u.apd.lengkap}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-error/10 text-error border border-error/15 px-2 py-1 text-xs font-black tabular-nums">
+                            {u.apd.tidakLengkap}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
 }
-
