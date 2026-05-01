@@ -13,12 +13,26 @@ const ENTITY_TO_SHEET: Record<string, string> = {
   upt: "Data_UPT",
 };
 
-async function loadBestHeaderRow(sheet: any): Promise<string[]> {
-  for (let rowIndex = 1; rowIndex <= 5; rowIndex++) {
+function normalizeHeader(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+async function loadBestHeaderRow(sheet: any, required: string[] = []): Promise<string[]> {
+  const requiredNormalized = required.map(normalizeHeader).filter(Boolean);
+  for (let rowIndex = 1; rowIndex <= 30; rowIndex++) {
     try {
       await sheet.loadHeaderRow(rowIndex);
       const headers = (sheet.headerValues ?? []) as string[];
-      if (headers.some((h) => String(h ?? "").trim().length > 0)) return headers;
+      const normalized = headers.map(normalizeHeader).filter(Boolean);
+      const hasAny = normalized.length > 0;
+      const satisfies =
+        requiredNormalized.length === 0 ||
+        requiredNormalized.every((req) => normalized.includes(req));
+      if (hasAny && satisfies) return headers;
     } catch {
     }
   }
@@ -46,7 +60,14 @@ export async function GET(
   if (!sheet) {
     return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
   }
-  const headers = await loadBestHeaderRow(sheet);
+  const headers = await loadBestHeaderRow(
+    sheet,
+    entity === "users"
+      ? ["username", "password", "role"]
+      : entity === "klinik"
+        ? ["klinik"]
+        : ["upt", "unit_kerja"]
+  );
 
   const rows = await getRows(sheetTitle);
   return NextResponse.json({ headers, rows });
@@ -95,7 +116,14 @@ export async function POST(
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
-  const headers = await loadBestHeaderRow(sheet);
+  const headers = await loadBestHeaderRow(
+    sheet,
+    entity === "users"
+      ? ["username", "password", "role"]
+      : entity === "klinik"
+        ? ["klinik"]
+        : ["upt", "unit_kerja"]
+  );
 
   const row: Record<string, string> = {};
   for (const h of headers) {
@@ -148,14 +176,23 @@ export async function PATCH(
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
-  await loadBestHeaderRow(sheet);
+  const headers = await loadBestHeaderRow(
+    sheet,
+    entity === "users"
+      ? ["username", "password", "role"]
+      : entity === "klinik"
+        ? ["klinik"]
+        : ["upt", "unit_kerja"]
+  );
   const rows = await sheet.getRows<Record<string, string>>();
   const row = rows.find((r) => (r as any).rowNumber === rowNumber);
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
 
+  const headerSet = new Set((headers ?? []).map((h) => String(h ?? "").trim()).filter(Boolean));
   for (const [k, v] of Object.entries(data)) {
     if (k === "_rowNumber") continue;
     if (entity === "users" && k === "id") continue;
+    if (!headerSet.has(k)) continue;
     (row as any)[k] = typeof v === "string" ? v : v == null ? "" : String(v);
   }
   try {
@@ -187,7 +224,14 @@ export async function DELETE(
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
-  await loadBestHeaderRow(sheet);
+  await loadBestHeaderRow(
+    sheet,
+    entity === "users"
+      ? ["username", "password", "role"]
+      : entity === "klinik"
+        ? ["klinik"]
+        : ["upt", "unit_kerja"]
+  );
   const rows = await sheet.getRows<Record<string, string>>();
   const row = rows.find((r) => (r as any).rowNumber === rowNumber);
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
