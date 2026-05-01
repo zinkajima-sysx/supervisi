@@ -24,6 +24,20 @@
 .DS_Store
 *.pem
 
+# local tooling
+/.trae/
+/.vscode/
+
+# local data (do not commit)
+Data_*.csv
+login.txt
+apd.md
+p3k.md
+
+# next-pwa build artifacts
+/public/sw.js
+/public/workbox-*.js
+
 # debug
 npm-debug.log*
 yarn-debug.log*
