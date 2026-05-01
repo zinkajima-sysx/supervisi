@@ -1,11 +1,25 @@
 import { getSpreadsheet } from "@/lib/google";
 
+async function loadBestHeaderRow(sheet: any): Promise<string[]> {
+  for (let rowIndex = 1; rowIndex <= 5; rowIndex++) {
+    try {
+      await sheet.loadHeaderRow(rowIndex);
+      const headers = (sheet.headerValues ?? []) as string[];
+      if (headers.some((h) => String(h ?? "").trim().length > 0)) return headers;
+    } catch {
+    }
+  }
+  await sheet.loadHeaderRow();
+  return (sheet.headerValues ?? []) as string[];
+}
+
 export async function getMasterData() {
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle["Master_Data"];
   if (!sheet) {
     throw new Error('Sheet "Master_Data" not found');
   }
+  await loadBestHeaderRow(sheet);
 
   const rows = await sheet.getRows<Record<string, string>>();
   const daftar_daop: string[] = [];
@@ -38,6 +52,7 @@ export async function appendRow(
   if (!sheet) {
     throw new Error(`Sheet "${sheetTitle}" not found`);
   }
+  await loadBestHeaderRow(sheet);
   await sheet.addRow(data as any);
 }
 
@@ -47,6 +62,7 @@ export async function getRows(sheetTitle: string): Promise<Record<string, any>[]
   if (!sheet) {
     throw new Error(`Sheet "${sheetTitle}" not found`);
   }
+  await loadBestHeaderRow(sheet);
   const rows = await sheet.getRows<Record<string, string>>();
   return rows.map((r) => {
     const obj = ((r as any).toObject?.() ?? ({ ...(r as any) })) as Record<string, any>;
