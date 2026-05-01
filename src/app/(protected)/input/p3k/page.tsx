@@ -60,6 +60,16 @@ export default function InputP3kPage() {
     [session?.user?.role]
   );
 
+  const wilayahKerja = useMemo(() => (session?.user?.wilayahKerja ?? "").trim(), [session?.user?.wilayahKerja]);
+
+  const matchedKlinik = useMemo(() => {
+    if (!wilayahKerja) return null;
+    if (wilayahKerja.toUpperCase() === "ALL") return null;
+    return klinikOptions.find((k) => k.label.toLowerCase() === wilayahKerja.toLowerCase()) ?? null;
+  }, [wilayahKerja, klinikOptions]);
+
+  const isScopedKlinik = useMemo(() => isKepala && !!matchedKlinik, [isKepala, matchedKlinik]);
+
   const [tanggal, setTanggal] = useState("");
   const [idKlinik, setIdKlinik] = useState("");
   const [daop, setDaop] = useState("");
@@ -101,23 +111,20 @@ export default function InputP3kPage() {
   }, []);
 
   useEffect(() => {
-    if (!isKepala) return;
-    const wilayah = (session?.user?.wilayahKerja ?? "").trim();
-    if (!wilayah) return;
-    const found = klinikOptions.find((k) => k.label.toLowerCase() === wilayah.toLowerCase());
-    if (found) setIdKlinik(found.id);
-  }, [isKepala, session?.user?.wilayahKerja, klinikOptions]);
+    if (!isScopedKlinik) return;
+    if (matchedKlinik) setIdKlinik(matchedKlinik.id);
+  }, [isScopedKlinik, matchedKlinik]);
 
   useEffect(() => {
     setDaop("DAOP 2 BANDUNG");
   }, []);
 
   const visibleUptRows = useMemo(() => {
-    if (!isKepala) return uptRows;
-    const wilayah = (session?.user?.wilayahKerja ?? "").trim().toLowerCase();
-    if (!wilayah) return [];
+    if (!isScopedKlinik) return uptRows;
+    const wilayah = wilayahKerja.trim().toLowerCase();
+    if (!wilayah) return uptRows;
     return uptRows.filter((r) => pick(r, ["klinik"]).toLowerCase() === wilayah);
-  }, [isKepala, session?.user?.wilayahKerja, uptRows]);
+  }, [isScopedKlinik, wilayahKerja, uptRows]);
 
   const daftarUnitKerja = useMemo(() => {
     const s = new Set<string>();
@@ -199,12 +206,12 @@ export default function InputP3kPage() {
           <div className="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 border-primary/10">
             <div className="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
             <span className="text-xs font-bold uppercase tracking-widest text-primary/80">
-              {isKepala ? "Klinik Terkunci" : "Mode Admin"}
+              {isScopedKlinik ? "Klinik Terkunci" : "Mode ALL"}
             </span>
-            {isKepala && session?.user?.wilayahKerja && (
+            {isScopedKlinik && wilayahKerja && (
               <>
                 <div className="h-4 w-[1px] bg-base-content/10"></div>
-                <span className="text-xs font-black opacity-60">{session.user.wilayahKerja}</span>
+                <span className="text-xs font-black opacity-60">{wilayahKerja}</span>
               </>
             )}
           </div>
