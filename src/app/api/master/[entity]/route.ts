@@ -13,6 +13,19 @@ const ENTITY_TO_SHEET: Record<string, string> = {
   upt: "Data_UPT",
 };
 
+async function loadBestHeaderRow(sheet: any): Promise<string[]> {
+  for (let rowIndex = 1; rowIndex <= 5; rowIndex++) {
+    try {
+      await sheet.loadHeaderRow(rowIndex);
+      const headers = (sheet.headerValues ?? []) as string[];
+      if (headers.some((h) => String(h ?? "").trim().length > 0)) return headers;
+    } catch {
+    }
+  }
+  await sheet.loadHeaderRow();
+  return (sheet.headerValues ?? []) as string[];
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ entity: string }> }
@@ -33,8 +46,7 @@ export async function GET(
   if (!sheet) {
     return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
   }
-  await sheet.loadHeaderRow();
-  const headers = sheet.headerValues ?? [];
+  const headers = await loadBestHeaderRow(sheet);
 
   const rows = await getRows(sheetTitle);
   return NextResponse.json({ headers, rows });
@@ -83,12 +95,12 @@ export async function POST(
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
-  await sheet.loadHeaderRow();
-  const headers = sheet.headerValues ?? [];
+  const headers = await loadBestHeaderRow(sheet);
 
   const row: Record<string, string> = {};
   for (const h of headers) {
     if (h === "_rowNumber") continue;
+    if (!String(h ?? "").trim()) continue;
     const v = data[h];
     row[h] = typeof v === "string" ? v : v == null ? "" : String(v);
   }
@@ -104,8 +116,14 @@ export async function POST(
     row.id = formatUserId(max + 1);
   }
 
-  await sheet.addRow(row as any);
-  return NextResponse.json({ ok: true });
+  try {
+    await sheet.addRow(row as any);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("master POST failed", { entity, sheetTitle }, err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function PATCH(
@@ -130,6 +148,7 @@ export async function PATCH(
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
+  await loadBestHeaderRow(sheet);
   const rows = await sheet.getRows<Record<string, string>>();
   const row = rows.find((r) => (r as any).rowNumber === rowNumber);
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
@@ -139,8 +158,14 @@ export async function PATCH(
     if (entity === "users" && k === "id") continue;
     (row as any)[k] = typeof v === "string" ? v : v == null ? "" : String(v);
   }
-  await (row as any).save();
-  return NextResponse.json({ ok: true });
+  try {
+    await (row as any).save();
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("master PATCH failed", { entity, sheetTitle, rowNumber }, err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function DELETE(
@@ -162,9 +187,16 @@ export async function DELETE(
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) return NextResponse.json({ error: `Sheet "${sheetTitle}" not found` }, { status: 404 });
+  await loadBestHeaderRow(sheet);
   const rows = await sheet.getRows<Record<string, string>>();
   const row = rows.find((r) => (r as any).rowNumber === rowNumber);
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
-  await (row as any).delete();
-  return NextResponse.json({ ok: true });
+  try {
+    await (row as any).delete();
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("master DELETE failed", { entity, sheetTitle, rowNumber }, err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
