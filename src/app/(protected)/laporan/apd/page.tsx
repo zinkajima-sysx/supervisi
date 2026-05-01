@@ -15,7 +15,7 @@ import {
   ChevronRight
 } from "lucide-react";
 
-import ExportCsvButton from "@/components/ExportCsvButton";
+import ExportCsvButton, { type CsvColumn } from "@/components/ExportCsvButton";
 
 type ApiResponse = { rows: Record<string, any>[] };
 
@@ -35,6 +35,7 @@ export default function LaporanApdPage() {
   const [tanggal, setTanggal] = useState("");
   const [pageSize, setPageSize] = useState<10 | 30 | 50 | 100>(10);
   const [pageIndex, setPageIndex] = useState(0);
+  const [klinikById, setKlinikById] = useState<Record<string, string>>({});
 
   const isKepala = useMemo(
     () => (session?.user?.role ?? "").toUpperCase() === "KEPALA_KLINIK",
@@ -60,6 +61,29 @@ export default function LaporanApdPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch("/api/master/klinik")
+      .then((r) => r.json())
+      .then((data: { rows?: Record<string, any>[] }) => {
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const row of data.rows ?? []) {
+          const id = String(row.id_klinik ?? row.id ?? "").trim();
+          const name = String(row.klinik ?? "").trim();
+          if (id && name) map[id] = name;
+        }
+        setKlinikById(map);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setKlinikById({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     setDaop("DAOP 2 BANDUNG");
   }, [isKepala, session?.user?.wilayahKerja]);
 
@@ -76,6 +100,95 @@ export default function LaporanApdPage() {
       return true;
     });
   }, [rows, isKepala, daop, upt, tanggal]);
+
+  const exportColumns = useMemo<CsvColumn[]>(() => {
+    const pick = (r: Record<string, any>, keys: string[]) => {
+      for (const k of keys) {
+        const v = String(r[k] ?? "").trim();
+        if (v) return v;
+      }
+      return "";
+    };
+
+    const itemKeys = [
+      { key: "helemet_type_general_g", label: "HELMET TIPE GENERAL (G)" },
+      { key: "helemet_type_electric_e", label: "HELMET TIPE ELECTRIC (E)" },
+      { key: "helemet_type_conductive_c", label: "HELMET TIPE CONDUCTIVE (C)" },
+      { key: "safety_spectales", label: "SAFETY SPECTACLES" },
+      { key: "safety_goggles", label: "SAFETY GOGGLES" },
+      { key: "ear_plug", label: "EAR PLUG" },
+      { key: "ear_muff", label: "EAR MUFF" },
+      { key: "masker", label: "MASKER" },
+      { key: "respirator", label: "RESPIRATOR" },
+      { key: "apron", label: "APRON" },
+      { key: "sarung_tangan_katun", label: "SARUNG TANGAN KATUN" },
+      { key: "sarung_tangan_kulit", label: "SARUNG TANGAN KULIT" },
+      { key: "sarung_tangan_karet", label: "SARUNG TANGAN KARET" },
+      { key: "sarung_tangan_electrical", label: "SARUNG TANGAN ELECTRICAL" },
+      { key: "sepatu_pelindung", label: "SEPATU PELINDUNG" },
+    ] satisfies Array<{ key: string; label: string }>;
+
+    return [
+      {
+        key: "tanggal_supervisi",
+        label: "TANGGAL SUPERVISI",
+        value: (r) => String(r.tanggal_supervisi ?? r.timestamp ?? "").slice(0, 10),
+      },
+      {
+        key: "petugas_nama",
+        label: "NAMA PETUGAS",
+        value: (r) => pick(r, ["petugas_nama", "submitter_nama", "submitter_username", "id"]),
+      },
+      {
+        key: "daop",
+        label: "DAOP / DIVRE",
+        value: (r) => pick(r, ["daop", "daop_divre"]),
+      },
+      {
+        key: "klinik",
+        label: "KLINIK",
+        value: (r) => {
+          const id = pick(r, ["id_klinik"]);
+          return klinikById[id] ?? "";
+        },
+      },
+      {
+        key: "upt",
+        label: "UPT",
+        value: (r) => pick(r, ["upt", "nama_upt"]),
+      },
+      {
+        key: "unit_kerja",
+        label: "NAMA UNIT KERJA",
+        value: (r) => pick(r, ["unit_kerja", "nama_unit_kerja"]),
+      },
+      ...itemKeys.map((c) => ({
+        key: c.key,
+        label: c.label,
+        value: (r: Record<string, any>) => pick(r, [c.key]),
+      })),
+      {
+        key: "apd_lainnya",
+        label: "APD LAINNYA",
+        value: (r) => pick(r, ["apd_lainnya"]),
+      },
+      {
+        key: "kodisi_apd_lainnya",
+        label: "KONDISI APD LAINNYA",
+        value: (r) => pick(r, ["kodisi_apd_lainnya", "kondisi_apd_lainnya"]),
+      },
+      {
+        key: "catatan",
+        label: "CATATAN",
+        value: (r) => pick(r, ["catatan"]),
+      },
+      {
+        key: "foto_url",
+        label: "FOTO",
+        value: (r) => pick(r, ["foto_url"]),
+      },
+    ];
+  }, [klinikById]);
 
   useEffect(() => {
     setPageIndex(0);
@@ -117,6 +230,7 @@ export default function LaporanApdPage() {
           <ExportCsvButton 
             rows={filtered} 
             fileName="laporan-apd.csv" 
+            columns={exportColumns}
             className="btn btn-primary rounded-xl shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
           />
         </div>
