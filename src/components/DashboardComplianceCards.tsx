@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Calendar, ShieldCheck, ShieldX, Stethoscope, TriangleAlert } from "lucide-react";
+import {
+  Activity,
+  Calendar,
+  CheckCircle2,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  Stethoscope,
+  TriangleAlert,
+  XCircle,
+} from "lucide-react";
 
 type UnitStats = {
   unit: string;
@@ -23,30 +33,6 @@ type ApiResponse = {
   groups: GroupStats[];
   error?: string;
 };
-
-function Badge({
-  label,
-  value,
-  variant,
-}: {
-  label: string;
-  value: number;
-  variant: "ok" | "bad" | "info";
-}) {
-  const cls =
-    variant === "ok"
-      ? "bg-success/10 text-success border-success/15"
-      : variant === "bad"
-        ? "bg-error/10 text-error border-error/15"
-        : "bg-base-200/60 text-base-content/70 border-base-content/10";
-
-  return (
-    <div className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 ${cls}`}>
-      <div className="text-[10px] font-black uppercase tracking-[0.22em]">{label}</div>
-      <div className="text-sm font-black tabular-nums">{value}</div>
-    </div>
-  );
-}
 
 export default function DashboardComplianceCards({
   initialYear,
@@ -232,80 +218,98 @@ export default function DashboardComplianceCards({
             : (g.units ?? [])) as UnitStats[];
 
           return (
-            <div key={g?.groupId ?? `sk-${idx}`} className="glass-card overflow-hidden">
-              <div className="px-6 pt-5 pb-4 border-b border-base-content/5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/45">
-                      Card {idx + 1}
-                    </div>
-                    <div className="mt-1 text-base font-black tracking-tight text-base-content truncate">
-                      {loading ? "Memuat…" : String(g.groupLabel ?? "Unit Kerja")}
-                    </div>
-                  </div>
-                  <div className="badge badge-outline badge-sm opacity-60">{year} • S{semester}</div>
-                </div>
-              </div>
-
+            <div
+              key={g?.groupId ?? `sk-${idx}`}
+              className="w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col"
+            >
               <div className="overflow-x-auto">
-                <table className="table w-full">
+                <table className="w-full text-left border-collapse min-w-[550px]">
                   <thead>
-                    <tr>
+                    <tr className="border-b border-slate-200">
                       <th
                         rowSpan={2}
-                        className="w-[38%] bg-base-100/50 align-middle text-left text-[10px] font-black uppercase tracking-[0.22em] text-base-content/70"
+                        className="p-3 pl-4 text-xs md:text-sm font-semibold text-slate-700 bg-slate-50/50 border-r border-slate-200 align-bottom w-1/3"
                       >
-                        Unit Kerja
+                        UNIT KERJA
                       </th>
                       <th
                         colSpan={2}
-                        className="bg-warning/10 text-center text-[10px] font-black uppercase tracking-[0.22em] text-warning/90"
+                        className="p-2 text-xs font-semibold text-center bg-amber-50 text-amber-900 border-r border-slate-200 border-b border-amber-200/50"
                       >
-                        P3K
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-amber-600" />
+                          P3K
+                        </div>
                       </th>
                       <th
                         colSpan={2}
-                        className="bg-info/10 text-center text-[10px] font-black uppercase tracking-[0.22em] text-info/90"
+                        className="p-2 text-xs font-semibold text-center bg-blue-50 text-blue-900 border-b border-blue-200/50"
                       >
-                        APD
+                        <div className="flex items-center justify-center gap-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5 text-blue-600" />
+                          APD
+                        </div>
                       </th>
                     </tr>
-                    <tr>
-                      <th className="bg-warning/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
-                        Lengkap
+
+                    <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider">
+                      <th className="p-2 font-medium text-slate-600 bg-amber-50/40 border-r border-slate-200 w-1/6">
+                        <div className="flex items-center justify-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          <span>Lengkap</span>
+                        </div>
                       </th>
-                      <th className="bg-warning/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
-                        Tdk Lengkap
+                      <th className="p-2 font-medium text-slate-600 bg-amber-50/40 border-r border-slate-200 w-1/6">
+                        <div className="flex items-center justify-center gap-1">
+                          <XCircle className="w-3 h-3 text-rose-500" />
+                          <span>Tdk Lengkap</span>
+                        </div>
                       </th>
-                      <th className="bg-info/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
-                        Lengkap
+                      <th className="p-2 font-medium text-slate-600 bg-blue-50/40 border-r border-slate-200 w-1/6">
+                        <div className="flex items-center justify-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          <span>Lengkap</span>
+                        </div>
                       </th>
-                      <th className="bg-info/5 text-center text-[10px] font-black uppercase tracking-[0.22em] text-base-content/60">
-                        Tdk Lengkap
+                      <th className="p-2 font-medium text-slate-600 bg-blue-50/40 w-1/6">
+                        <div className="flex items-center justify-center gap-1">
+                          <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                          <span>Tdk Lengkap</span>
+                        </div>
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+
+                  <tbody className="text-xs md:text-sm">
                     {units.map((u, uIdx) => (
-                      <tr key={`${u.unit}-${uIdx}`} className="hover:bg-primary/5 transition-colors">
-                        <td className="text-sm font-semibold text-base-content truncate">{u.unit}</td>
-                        <td className="text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-success/10 text-success border border-success/15 px-2 py-1 text-xs font-black tabular-nums">
+                      <tr
+                        key={`${u.unit}-${uIdx}`}
+                        className={`border-b border-slate-100 hover:bg-slate-50/80 transition-colors ${
+                          uIdx === units.length - 1 ? "border-b-0" : ""
+                        }`}
+                      >
+                        <td className="p-3 pl-4 font-medium text-slate-700 border-r border-slate-100">
+                          {u.unit}
+                        </td>
+
+                        <td className="p-2 border-r border-slate-100 text-center bg-amber-50/10">
+                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
                             {u.p3k.lengkap}
                           </span>
                         </td>
-                        <td className="text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-error/10 text-error border border-error/15 px-2 py-1 text-xs font-black tabular-nums">
+                        <td className="p-2 border-r border-slate-100 text-center bg-amber-50/10">
+                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/10">
                             {u.p3k.tidakLengkap}
                           </span>
                         </td>
-                        <td className="text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-success/10 text-success border border-success/15 px-2 py-1 text-xs font-black tabular-nums">
+
+                        <td className="p-2 border-r border-slate-100 text-center bg-blue-50/10">
+                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
                             {u.apd.lengkap}
                           </span>
                         </td>
-                        <td className="text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 rounded-full bg-error/10 text-error border border-error/15 px-2 py-1 text-xs font-black tabular-nums">
+                        <td className="p-2 text-center bg-blue-50/10">
+                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/10">
                             {u.apd.tidakLengkap}
                           </span>
                         </td>
