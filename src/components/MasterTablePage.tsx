@@ -59,6 +59,19 @@ export default function MasterTablePage({ title, description, entity, fileName }
   const { data: session } = useSession();
   const isAdmin = (session?.user?.role ?? "").toUpperCase() === "ADMIN";
 
+  const wilayahKerjaOptions = useMemo(() => {
+    if (entity !== "users") return [];
+    return [
+      "ALL",
+      "MEDISKA BANDUNG",
+      "MEDISKA WASTU KENCANA",
+      "MEDISKA PURWAKARTA",
+      "MEDISKA CIBATU",
+      "MEDISKA TASIKMALAYA",
+      "MEDISKA BANJAR",
+    ];
+  }, [entity]);
+
   const [rows, setRows] = useState<Row[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -504,6 +517,7 @@ export default function MasterTablePage({ title, description, entity, fileName }
                 const isPassword = entity === "users" && k === "password";
                 const isRole = entity === "users" && k === "role";
                 const isAutoId = entity === "users" && k === "id";
+                const isWilayahKerja = entity === "users" && k === "wilayah_kerja";
                 const isKlinikField = entity === "upt" && k === "klinik";
                 const colSpan = k === "keterangan" || k === "catatan" ? "col-span-12" : "col-span-12 md:col-span-6";
 
@@ -524,6 +538,32 @@ export default function MasterTablePage({ title, description, entity, fileName }
                           Pilih Role
                         </option>
                         {["ADMIN", "MANAGER", "ASMEN", "KEPALA_KLINIK"].map((x) => (
+                          <option key={x} value={x}>
+                            {x}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+
+                if (isWilayahKerja) {
+                  return (
+                    <div key={k} className={colSpan}>
+                      <label className="label pb-2">
+                        <span className="label-text text-xs font-black uppercase tracking-[0.22em] text-primary/80">
+                          {humanizeKey(k)}
+                        </span>
+                      </label>
+                      <select
+                        className="select select-bordered w-full rounded-2xl bg-base-200/40 border-base-content/10 focus:border-primary/30 focus:bg-base-100"
+                        value={form[k] ?? ""}
+                        onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
+                      >
+                        <option value="" disabled>
+                          Pilih Wilayah Kerja
+                        </option>
+                        {wilayahKerjaOptions.map((x) => (
                           <option key={x} value={x}>
                             {x}
                           </option>
