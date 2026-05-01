@@ -50,6 +50,20 @@ function toNumber(value: unknown): number | null {
   return n;
 }
 
+function parseUserId(value: unknown): number | null {
+  const raw = String(value ?? "").trim();
+  const m = /^USR-(\d+)$/.exec(raw);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function formatUserId(n: number): string {
+  const num = Math.max(1, Math.floor(n));
+  return `USR-${String(num).padStart(4, "0")}`;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ entity: string }> }
@@ -77,6 +91,17 @@ export async function POST(
     if (h === "_rowNumber") continue;
     const v = data[h];
     row[h] = typeof v === "string" ? v : v == null ? "" : String(v);
+  }
+
+  if (entity === "users") {
+    const existing = await sheet.getRows<Record<string, string>>();
+    let max = 0;
+    for (const r of existing) {
+      const obj = ((r as any).toObject?.() ?? {}) as Record<string, unknown>;
+      const n = parseUserId(obj.id);
+      if (n && n > max) max = n;
+    }
+    row.id = formatUserId(max + 1);
   }
 
   await sheet.addRow(row as any);
@@ -111,6 +136,7 @@ export async function PATCH(
 
   for (const [k, v] of Object.entries(data)) {
     if (k === "_rowNumber") continue;
+    if (entity === "users" && k === "id") continue;
     (row as any)[k] = typeof v === "string" ? v : v == null ? "" : String(v);
   }
   await (row as any).save();

@@ -503,6 +503,7 @@ export default function MasterTablePage({ title, description, entity, fileName }
                 const isDaop = k === "daop" || k === "daop  ";
                 const isPassword = entity === "users" && k === "password";
                 const isRole = entity === "users" && k === "role";
+                const isAutoId = entity === "users" && k === "id";
                 const isKlinikField = entity === "upt" && k === "klinik";
                 const colSpan = k === "keterangan" || k === "catatan" ? "col-span-12" : "col-span-12 md:col-span-6";
 
@@ -570,9 +571,11 @@ export default function MasterTablePage({ title, description, entity, fileName }
                       type={isPassword ? "password" : "text"}
                       value={form[k] ?? ""}
                       onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
-                      readOnly={isDaop}
-                      disabled={isDaop}
-                      placeholder={isDaop ? "DAOP 2 BANDUNG" : undefined}
+                      readOnly={isDaop || isAutoId}
+                      disabled={isDaop || isAutoId}
+                      placeholder={
+                        isDaop ? "DAOP 2 BANDUNG" : isAutoId ? "Auto (USR-0001, USR-0002, ...)" : undefined
+                      }
                     />
                   </div>
                 );
