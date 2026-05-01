@@ -3,8 +3,12 @@ import CredentialsProvider from "next-auth/providers/credentials";
 
 import { verifyCredentials } from "@/lib/users";
 
+const nextAuthUrl = String(process.env.NEXTAUTH_URL ?? "");
+const isLocalhostUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?($|\/)/i.test(nextAuthUrl);
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
+  useSecureCookies: !isLocalhostUrl,
   session: {
     strategy: "jwt",
   },
