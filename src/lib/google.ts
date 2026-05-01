@@ -2,7 +2,7 @@ import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { google } from "googleapis";
 
-import { getServiceAccountCredentials, requireEnv } from "@/lib/env";
+import { getServiceAccountCredentials, requireEnvClean } from "@/lib/env";
 
 export function createJwt(scopes: string[]) {
   const creds = getServiceAccountCredentials();
@@ -15,7 +15,7 @@ export function createJwt(scopes: string[]) {
 
 export async function getSpreadsheet() {
   const jwt = createJwt(["https://www.googleapis.com/auth/spreadsheets"]);
-  const doc = new GoogleSpreadsheet(requireEnv("GOOGLE_SHEETS_ID"), jwt);
+  const doc = new GoogleSpreadsheet(requireEnvClean("GOOGLE_SHEETS_ID"), jwt);
   await doc.loadInfo();
   return doc;
 }

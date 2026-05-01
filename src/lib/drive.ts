@@ -1,7 +1,7 @@
 import { Readable } from "stream";
 
 import { getDriveClient } from "@/lib/google";
-import { requireEnv } from "@/lib/env";
+import { requireEnvClean } from "@/lib/env";
 
 export async function uploadToDrive(params: {
   fileName: string;
@@ -9,7 +9,7 @@ export async function uploadToDrive(params: {
   buffer: Buffer;
 }): Promise<{ fileId: string; webViewLink: string }> {
   const drive = getDriveClient();
-  const folderId = requireEnv("GOOGLE_DRIVE_FOLDER_ID");
+  const folderId = requireEnvClean("GOOGLE_DRIVE_FOLDER_ID");
 
   const createRes = await drive.files.create({
     requestBody: {

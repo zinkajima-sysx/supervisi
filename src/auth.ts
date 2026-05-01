@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { verifyCredentials } from "@/lib/users";
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
   },
@@ -20,7 +21,13 @@ export const authOptions: NextAuthOptions = {
 
         if (!username || !password) return null;
 
-        const user = await verifyCredentials(username, password);
+        let user: Awaited<ReturnType<typeof verifyCredentials>> = null;
+        try {
+          user = await verifyCredentials(username, password);
+        } catch (err) {
+          console.error("verifyCredentials failed", err);
+          throw err;
+        }
         if (!user) return null;
 
         return {
@@ -56,4 +63,3 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
 };
-

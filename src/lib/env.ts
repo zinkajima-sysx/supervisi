@@ -6,8 +6,45 @@ export function requireEnv(name: string): string {
   return value;
 }
 
+function stripWrappingQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+export function requireEnvClean(name: string): string {
+  return stripWrappingQuotes(requireEnv(name));
+}
+
+function getFirstEnvValue(names: string[]): string | undefined {
+  for (const name of names) {
+    const raw = process.env[name];
+    const cleaned = raw ? stripWrappingQuotes(raw) : "";
+    if (cleaned) return cleaned;
+  }
+  return undefined;
+}
+
+export function requireFirstEnvClean(names: string[]): string {
+  const value = getFirstEnvValue(names);
+  if (!value) {
+    throw new Error(`Missing env var: ${names.join(" | ")}`);
+  }
+  return value;
+}
+
 export function getPrivateKeyFromEnv(): string {
-  const raw = requireEnv("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
+  const raw = requireFirstEnvClean([
+    "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+    "GOOGLE_PRIVATE_KEY",
+    "GOOGLE_CLIENT_PRIVATE_KEY",
+  ]);
   return raw.replace(/\\n/g, "\n");
 }
 
@@ -44,8 +81,8 @@ export function getServiceAccountCredentials(): {
   }
 
   return {
-    projectId: process.env.GOOGLE_PROJECT_ID,
-    email: requireEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
+    projectId: getFirstEnvValue(["GOOGLE_PROJECT_ID"]) ?? undefined,
+    email: requireFirstEnvClean(["GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_CLIENT_EMAIL"]),
     key: getPrivateKeyFromEnv(),
   };
 }

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
@@ -28,7 +28,13 @@ export default function LoginPage() {
       });
 
       if (!res || res.error) {
-        setError("Username atau password tidak cocok. Silakan coba lagi.");
+        if (res?.error === "CredentialsSignin") {
+          setError("Username atau password tidak cocok. Silakan coba lagi.");
+        } else {
+          setError(
+            `Terjadi kesalahan pada server (${res?.error ?? "unknown"}). Pastikan ENV Vercel & akses Google Sheet sudah benar.`
+          );
+        }
       } else {
         router.replace("/dashboard");
       }
