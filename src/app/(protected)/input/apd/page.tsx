@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
 import { APD_STATUS_OPTIONS } from "@/lib/options";
+import { useToast } from "@/components/ToastProvider";
 
 type ApiRowsResponse = { rows: Record<string, string>[] };
 
@@ -68,6 +69,7 @@ const APD_GROUPS: ApdGroup[] = [
 
 export default function InputApdPage() {
   const { data: session } = useSession();
+  const toast = useToast();
   const [uptRows, setUptRows] = useState<Record<string, string>[]>([]);
   const [klinikOptions, setKlinikOptions] = useState<KlinikOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -187,9 +189,11 @@ export default function InputApdPage() {
       const res = await fetch("/api/supervisi/apd", { method: "POST", body: form });
       if (!res.ok) {
         setAlert({ type: "error", msg: "Gagal menyimpan data APD." });
+        toast.error("Gagal menyimpan data APD.", "Gagal");
         return;
       }
       setAlert({ type: "success", msg: "Berhasil menyimpan data APD." });
+      toast.success("Berhasil menyimpan data APD.", "Sukses");
       setIdKlinik("");
       setUpt("");
       setUnitKerja("");
@@ -200,6 +204,7 @@ export default function InputApdPage() {
       setFile(null);
     } catch {
       setAlert({ type: "error", msg: "Terjadi error saat submit." });
+      toast.error("Terjadi error saat submit.", "Gagal");
     } finally {
       setIsSubmitting(false);
     }

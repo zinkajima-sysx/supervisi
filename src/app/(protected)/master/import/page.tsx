@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { FileSpreadsheet, Loader2, Save } from "lucide-react";
 
+import { useToast } from "@/components/ToastProvider";
+
 type ImportResponse = {
   committed: boolean;
   sheet: string;
@@ -62,6 +64,7 @@ function ImportCard({
   endpoint: string;
   defaultSheet: string;
 }) {
+  const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [sheet, setSheet] = useState(defaultSheet);
   const [busy, setBusy] = useState(false);
@@ -85,12 +88,15 @@ function ImportCard({
     const data = (await res.json()) as ImportResponse;
     if (!res.ok) {
       setError(data.error || "Gagal memproses CSV.");
+      toast.error(data.error || "Gagal memproses CSV.", "Import gagal");
       setResult(null);
       setBusy(false);
       return;
     }
 
     setResult(data);
+    if (data.committed) toast.success(`Berhasil simpan ke sheet: ${data.sheet}`, "Import sukses");
+    else toast.info(`Preview siap (${data.totalRows} baris)`, "Preview");
     setBusy(false);
   }
 

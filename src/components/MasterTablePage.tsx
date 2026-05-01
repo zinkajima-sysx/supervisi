@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 
 import ExportCsvButton from "@/components/ExportCsvButton";
+import { useToast } from "@/components/ToastProvider";
 
 type Props = {
   title: string;
@@ -57,6 +58,7 @@ function getRowNumber(row: Row): number | null {
 
 export default function MasterTablePage({ title, description, entity, fileName }: Props) {
   const { data: session } = useSession();
+  const toast = useToast();
   const isAdmin = (session?.user?.role ?? "").toUpperCase() === "ADMIN";
 
   const wilayahKerjaOptions = useMemo(() => {
@@ -232,12 +234,15 @@ export default function MasterTablePage({ title, description, entity, fileName }
         const data = (await res.json().catch(() => ({}))) as ApiResponse;
         if (!res.ok) {
           setActionError(data.error ?? "Gagal menyimpan data.");
+          toast.error(data.error ?? "Gagal menyimpan data.", "Gagal");
           return;
         }
+        toast.success("Data berhasil ditambahkan.", "Sukses");
       } else {
         const rowNumber = editingRow ? getRowNumber(editingRow) : null;
         if (!rowNumber) {
           setActionError("RowNumber tidak ditemukan.");
+          toast.error("RowNumber tidak ditemukan.", "Gagal");
           return;
         }
         const res = await fetch(`/api/master/${entity}`, {
@@ -248,13 +253,16 @@ export default function MasterTablePage({ title, description, entity, fileName }
         const data = (await res.json().catch(() => ({}))) as ApiResponse;
         if (!res.ok) {
           setActionError(data.error ?? "Gagal menyimpan perubahan.");
+          toast.error(data.error ?? "Gagal menyimpan perubahan.", "Gagal");
           return;
         }
+        toast.success("Perubahan berhasil disimpan.", "Sukses");
       }
       await reload();
       setModalOpen(false);
     } catch {
       setActionError("Gagal memproses permintaan.");
+      toast.error("Gagal memproses permintaan.", "Gagal");
     } finally {
       setActionBusy(false);
     }
@@ -270,6 +278,7 @@ export default function MasterTablePage({ title, description, entity, fileName }
     const rowNumber = deletingRow ? getRowNumber(deletingRow) : null;
     if (!rowNumber) {
       setActionError("RowNumber tidak ditemukan.");
+      toast.error("RowNumber tidak ditemukan.", "Gagal");
       setConfirmOpen(false);
       return;
     }
@@ -284,12 +293,15 @@ export default function MasterTablePage({ title, description, entity, fileName }
       const data = (await res.json().catch(() => ({}))) as ApiResponse;
       if (!res.ok) {
         setActionError(data.error ?? "Gagal menghapus data.");
+        toast.error(data.error ?? "Gagal menghapus data.", "Gagal");
         return;
       }
+      toast.success("Data berhasil dihapus.", "Sukses");
       await reload();
       setConfirmOpen(false);
     } catch {
       setActionError("Gagal menghapus data.");
+      toast.error("Gagal menghapus data.", "Gagal");
     } finally {
       setActionBusy(false);
     }

@@ -8,6 +8,7 @@ import {
   KONDISI_KOTAK_OPTIONS,
   P3K_ITEM_OPTIONS,
 } from "@/lib/options";
+import { useToast } from "@/components/ToastProvider";
 
 type ApiRowsResponse = { rows: Record<string, string>[] };
 
@@ -48,6 +49,7 @@ const P3K_ITEMS: Array<{ key: string; label: string }> = [
 
 export default function InputP3kPage() {
   const { data: session } = useSession();
+  const toast = useToast();
   const [uptRows, setUptRows] = useState<Record<string, string>[]>([]);
   const [klinikOptions, setKlinikOptions] = useState<KlinikOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -169,9 +171,11 @@ export default function InputP3kPage() {
       const res = await fetch("/api/supervisi/p3k", { method: "POST", body: form });
       if (!res.ok) {
         setAlert({ type: "error", msg: "Gagal menyimpan data P3K." });
+        toast.error("Gagal menyimpan data P3K.", "Gagal");
         return;
       }
       setAlert({ type: "success", msg: "Berhasil menyimpan data P3K." });
+      toast.success("Berhasil menyimpan data P3K.", "Sukses");
       setIdKlinik("");
       setUnitKerja("");
       setUpt("");
@@ -184,6 +188,7 @@ export default function InputP3kPage() {
       setFile(null);
     } catch {
       setAlert({ type: "error", msg: "Terjadi error saat submit." });
+      toast.error("Terjadi error saat submit.", "Gagal");
     } finally {
       setIsSubmitting(false);
     }

@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 
 import LogoChecklist from "@/components/LogoChecklist";
+import { useToast } from "@/components/ToastProvider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const toast = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,17 +31,22 @@ export default function LoginPage() {
 
       if (!res || res.error) {
         if (res?.error === "CredentialsSignin") {
-          setError("Username atau password tidak cocok. Silakan coba lagi.");
+          const msg = "Username atau password tidak cocok. Silakan coba lagi.";
+          setError(msg);
+          toast.error(msg, "Login gagal");
         } else {
-          setError(
-            `Terjadi kesalahan pada server (${res?.error ?? "unknown"}). Pastikan ENV Vercel & akses Google Sheet sudah benar.`
-          );
+          const msg = `Terjadi kesalahan pada server (${res?.error ?? "unknown"}). Pastikan ENV Vercel & akses Google Sheet sudah benar.`;
+          setError(msg);
+          toast.error(msg, "Login gagal");
         }
       } else {
+        toast.success("Berhasil login. Mengalihkan ke dashboard…", "Sukses");
         router.replace("/dashboard");
       }
     } catch {
-      setError("Terjadi kesalahan pada sistem autentikasi.");
+      const msg = "Terjadi kesalahan pada sistem autentikasi.";
+      setError(msg);
+      toast.error(msg, "Login gagal");
     } finally {
       setIsLoading(false);
     }
