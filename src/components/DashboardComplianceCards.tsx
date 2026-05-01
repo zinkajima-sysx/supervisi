@@ -47,6 +47,7 @@ export default function DashboardComplianceCards({
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const yearOptions = useMemo(() => {
     const now = new Date().getFullYear();
@@ -90,6 +91,8 @@ export default function DashboardComplianceCards({
     role === "KEPALA_KLINIK" && wilayahKerja && wilayahKerja.toUpperCase() !== "ALL"
       ? wilayahKerja
       : "ALL";
+
+  const groups = useMemo(() => (loading ? Array.from({ length: 14 }) : data?.groups ?? []), [loading, data?.groups]);
 
   return (
     <section className="space-y-6">
@@ -207,8 +210,46 @@ export default function DashboardComplianceCards({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-        {(loading ? Array.from({ length: 6 }) : data?.groups ?? []).map((g: any, idx: number) => {
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold text-base-content/60">
+          {loading ? "Memuat ringkasan unit kerja…" : `${groups.length} card`}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm rounded-2xl"
+            onClick={() => {
+              const next: Record<string, boolean> = {};
+              for (const g of groups as any[]) {
+                const id = String(g?.groupId ?? "");
+                if (id) next[id] = false;
+              }
+              setCollapsed(next);
+            }}
+            disabled={loading}
+          >
+            Tampilkan Semua
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm rounded-2xl"
+            onClick={() => {
+              const next: Record<string, boolean> = {};
+              for (const g of groups as any[]) {
+                const id = String(g?.groupId ?? "");
+                if (id) next[id] = true;
+              }
+              setCollapsed(next);
+            }}
+            disabled={loading}
+          >
+            Collapse Semua
+          </button>
+        </div>
+      </div>
+
+      <div className="w-full flex flex-col gap-6">
+        {groups.map((g: any, idx: number) => {
           const units: UnitStats[] = (loading
             ? Array.from({ length: 6 }).map((_, i) => ({
                 unit: `Unit ${i + 1}`,
@@ -217,107 +258,126 @@ export default function DashboardComplianceCards({
               }))
             : (g.units ?? [])) as UnitStats[];
 
+          const groupId = String(g?.groupId ?? `card-${idx + 1}`);
+          const isCollapsed = collapsed[groupId] === true;
+
           return (
             <div
               key={g?.groupId ?? `sk-${idx}`}
               className="w-full bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col"
             >
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[550px]">
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th
-                        rowSpan={2}
-                        className="p-3 pl-4 text-xs md:text-sm font-semibold text-slate-700 bg-slate-50/50 border-r border-slate-200 align-bottom w-1/3"
-                      >
-                        UNIT KERJA
-                      </th>
-                      <th
-                        colSpan={2}
-                        className="p-2 text-xs font-semibold text-center bg-amber-50 text-amber-900 border-r border-slate-200 border-b border-amber-200/50"
-                      >
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Activity className="w-3.5 h-3.5 text-amber-600" />
-                          P3K
-                        </div>
-                      </th>
-                      <th
-                        colSpan={2}
-                        className="p-2 text-xs font-semibold text-center bg-blue-50 text-blue-900 border-b border-blue-200/50"
-                      >
-                        <div className="flex items-center justify-center gap-1.5">
-                          <ShieldAlert className="w-3.5 h-3.5 text-blue-600" />
-                          APD
-                        </div>
-                      </th>
-                    </tr>
-
-                    <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider">
-                      <th className="p-2 font-medium text-slate-600 bg-amber-50/40 border-r border-slate-200 w-1/6">
-                        <div className="flex items-center justify-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>Lengkap</span>
-                        </div>
-                      </th>
-                      <th className="p-2 font-medium text-slate-600 bg-amber-50/40 border-r border-slate-200 w-1/6">
-                        <div className="flex items-center justify-center gap-1">
-                          <XCircle className="w-3 h-3 text-rose-500" />
-                          <span>Tdk Lengkap</span>
-                        </div>
-                      </th>
-                      <th className="p-2 font-medium text-slate-600 bg-blue-50/40 border-r border-slate-200 w-1/6">
-                        <div className="flex items-center justify-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span>Lengkap</span>
-                        </div>
-                      </th>
-                      <th className="p-2 font-medium text-slate-600 bg-blue-50/40 w-1/6">
-                        <div className="flex items-center justify-center gap-1">
-                          <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                          <span>Tdk Lengkap</span>
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="text-xs md:text-sm">
-                    {units.map((u, uIdx) => (
-                      <tr
-                        key={`${u.unit}-${uIdx}`}
-                        className={`border-b border-slate-100 hover:bg-slate-50/80 transition-colors ${
-                          uIdx === units.length - 1 ? "border-b-0" : ""
-                        }`}
-                      >
-                        <td className="p-3 pl-4 font-medium text-slate-700 border-r border-slate-100">
-                          {u.unit}
-                        </td>
-
-                        <td className="p-2 border-r border-slate-100 text-center bg-amber-50/10">
-                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                            {u.p3k.lengkap}
-                          </span>
-                        </td>
-                        <td className="p-2 border-r border-slate-100 text-center bg-amber-50/10">
-                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/10">
-                            {u.p3k.tidakLengkap}
-                          </span>
-                        </td>
-
-                        <td className="p-2 border-r border-slate-100 text-center bg-blue-50/10">
-                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                            {u.apd.lengkap}
-                          </span>
-                        </td>
-                        <td className="p-2 text-center bg-blue-50/10">
-                          <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/10">
-                            {u.apd.tidakLengkap}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="px-4 py-2 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
+                <div className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
+                  {loading ? `CARD ${idx + 1}` : String(g?.groupLabel ?? `CARD ${idx + 1}`)}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs rounded-xl"
+                  onClick={() => setCollapsed((p) => ({ ...p, [groupId]: !isCollapsed }))}
+                  disabled={loading}
+                >
+                  {isCollapsed ? "Show" : "Collapse"}
+                </button>
               </div>
+
+              {!isCollapsed && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[550px]">
+                    <thead>
+                      <tr className="border-b border-slate-200">
+                        <th
+                          rowSpan={2}
+                          className="p-3 pl-4 text-xs md:text-sm font-semibold text-slate-700 bg-slate-50/50 border-r border-slate-200 align-bottom w-1/3"
+                        >
+                          UNIT KERJA
+                        </th>
+                        <th
+                          colSpan={2}
+                          className="p-2 text-xs font-semibold text-center bg-amber-50 text-amber-900 border-r border-slate-200 border-b border-amber-200/50"
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Activity className="w-3.5 h-3.5 text-amber-600" />
+                            P3K
+                          </div>
+                        </th>
+                        <th
+                          colSpan={2}
+                          className="p-2 text-xs font-semibold text-center bg-blue-50 text-blue-900 border-b border-blue-200/50"
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <ShieldAlert className="w-3.5 h-3.5 text-blue-600" />
+                            APD
+                          </div>
+                        </th>
+                      </tr>
+
+                      <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider">
+                        <th className="p-2 font-medium text-slate-600 bg-amber-50/40 border-r border-slate-200 w-1/6">
+                          <div className="flex items-center justify-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span>Lengkap</span>
+                          </div>
+                        </th>
+                        <th className="p-2 font-medium text-slate-600 bg-amber-50/40 border-r border-slate-200 w-1/6">
+                          <div className="flex items-center justify-center gap-1">
+                            <XCircle className="w-3 h-3 text-rose-500" />
+                            <span>Tdk Lengkap</span>
+                          </div>
+                        </th>
+                        <th className="p-2 font-medium text-slate-600 bg-blue-50/40 border-r border-slate-200 w-1/6">
+                          <div className="flex items-center justify-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span>Lengkap</span>
+                          </div>
+                        </th>
+                        <th className="p-2 font-medium text-slate-600 bg-blue-50/40 w-1/6">
+                          <div className="flex items-center justify-center gap-1">
+                            <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                            <span>Tdk Lengkap</span>
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="text-xs md:text-sm">
+                      {units.map((u, uIdx) => (
+                        <tr
+                          key={`${u.unit}-${uIdx}`}
+                          className={`border-b border-slate-100 hover:bg-slate-50/80 transition-colors ${
+                            uIdx === units.length - 1 ? "border-b-0" : ""
+                          }`}
+                        >
+                          <td className="p-3 pl-4 font-medium text-slate-700 border-r border-slate-100">
+                            {u.unit}
+                          </td>
+
+                          <td className="p-2 border-r border-slate-100 text-center bg-amber-50/10">
+                            <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                              {u.p3k.lengkap}
+                            </span>
+                          </td>
+                          <td className="p-2 border-r border-slate-100 text-center bg-amber-50/10">
+                            <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/10">
+                              {u.p3k.tidakLengkap}
+                            </span>
+                          </td>
+
+                          <td className="p-2 border-r border-slate-100 text-center bg-blue-50/10">
+                            <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                              {u.apd.lengkap}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center bg-blue-50/10">
+                            <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/10">
+                              {u.apd.tidakLengkap}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           );
         })}
