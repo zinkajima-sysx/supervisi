@@ -15,11 +15,18 @@ const REQUIRED_HEADERS_BY_SHEET: Record<string, string[]> = {
   Data_UPT: ["upt", "unit_kerja"],
 };
 
+type CachedRows = { expiresAt: number; rows: Record<string, any>[] };
+
+const headerRowIndexCache = new Map<string, number>();
+const rowsCache = new Map<string, CachedRows>();
+
 async function loadBestHeaderRow(sheet: any, required: string[] = []): Promise<string[]> {
   const requiredNormalized = required.map(normalizeHeader).filter(Boolean);
-  for (let rowIndex = 1; rowIndex <= 30; rowIndex++) {
+  const cacheKey = `${String(sheet?.title ?? "")}::${requiredNormalized.join("|")}`;
+  const cachedIndex = headerRowIndexCache.get(cacheKey);
+  if (cachedIndex) {
     try {
-      await sheet.loadHeaderRow(rowIndex);
+      await sheet.loadHeaderRow(cachedIndex);
       const headers = (sheet.headerValues ?? []) as string[];
       const normalized = headers.map(normalizeHeader).filter(Boolean);
       const hasAny = normalized.length > 0;
@@ -29,9 +36,31 @@ async function loadBestHeaderRow(sheet: any, required: string[] = []): Promise<s
       if (hasAny && satisfies) return headers;
     } catch {
     }
+    headerRowIndexCache.delete(cacheKey);
+  }
+
+  for (let rowIndex = 1; rowIndex <= 10; rowIndex++) {
+    try {
+      await sheet.loadHeaderRow(rowIndex);
+      const headers = (sheet.headerValues ?? []) as string[];
+      const normalized = headers.map(normalizeHeader).filter(Boolean);
+      const hasAny = normalized.length > 0;
+      const satisfies =
+        requiredNormalized.length === 0 ||
+        requiredNormalized.every((req) => normalized.includes(req));
+      if (hasAny && satisfies) {
+        headerRowIndexCache.set(cacheKey, rowIndex);
+        return headers;
+      }
+    } catch {
+    }
   }
   await sheet.loadHeaderRow();
   return (sheet.headerValues ?? []) as string[];
+}
+
+export function invalidateRowsCache(sheetTitle: string) {
+  rowsCache.delete(sheetTitle);
 }
 
 export async function getMasterData() {
@@ -75,9 +104,14 @@ export async function appendRow(
   }
   await loadBestHeaderRow(sheet, REQUIRED_HEADERS_BY_SHEET[sheetTitle] ?? []);
   await sheet.addRow(data as any);
+  invalidateRowsCache(sheetTitle);
 }
 
 export async function getRows(sheetTitle: string): Promise<Record<string, any>[]> {
+  const now = Date.now();
+  const cached = rowsCache.get(sheetTitle);
+  if (cached && cached.expiresAt > now) return cached.rows;
+
   const doc = await getSpreadsheet();
   const sheet = doc.sheetsByTitle[sheetTitle];
   if (!sheet) {
@@ -85,9 +119,11 @@ export async function getRows(sheetTitle: string): Promise<Record<string, any>[]
   }
   await loadBestHeaderRow(sheet, REQUIRED_HEADERS_BY_SHEET[sheetTitle] ?? []);
   const rows = await sheet.getRows<Record<string, string>>();
-  return rows.map((r) => {
+  const result = rows.map((r) => {
     const obj = ((r as any).toObject?.() ?? ({ ...(r as any) })) as Record<string, any>;
     obj._rowNumber = (r as any).rowNumber;
     return obj;
   });
+  rowsCache.set(sheetTitle, { expiresAt: now + 5_000, rows: result } satisfies CachedRows);
+  return result;
 }

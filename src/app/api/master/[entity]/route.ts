@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { authOptions } from "@/auth";
 import { getSpreadsheet } from "@/lib/google";
-import { getRows } from "@/lib/sheets";
+import { getRows, invalidateRowsCache } from "@/lib/sheets";
 
 export const runtime = "nodejs";
 
@@ -21,9 +21,28 @@ function normalizeHeader(value: unknown) {
     .replace(/\s+/g, " ");
 }
 
+const headerRowIndexCache = new Map<string, number>();
+
 async function loadBestHeaderRow(sheet: any, required: string[] = []): Promise<string[]> {
   const requiredNormalized = required.map(normalizeHeader).filter(Boolean);
-  for (let rowIndex = 1; rowIndex <= 30; rowIndex++) {
+  const cacheKey = `${String(sheet?.title ?? "")}::${requiredNormalized.join("|")}`;
+  const cachedIndex = headerRowIndexCache.get(cacheKey);
+  if (cachedIndex) {
+    try {
+      await sheet.loadHeaderRow(cachedIndex);
+      const headers = (sheet.headerValues ?? []) as string[];
+      const normalized = headers.map(normalizeHeader).filter(Boolean);
+      const hasAny = normalized.length > 0;
+      const satisfies =
+        requiredNormalized.length === 0 ||
+        requiredNormalized.every((req) => normalized.includes(req));
+      if (hasAny && satisfies) return headers;
+    } catch {
+    }
+    headerRowIndexCache.delete(cacheKey);
+  }
+
+  for (let rowIndex = 1; rowIndex <= 10; rowIndex++) {
     try {
       await sheet.loadHeaderRow(rowIndex);
       const headers = (sheet.headerValues ?? []) as string[];
@@ -32,7 +51,10 @@ async function loadBestHeaderRow(sheet: any, required: string[] = []): Promise<s
       const satisfies =
         requiredNormalized.length === 0 ||
         requiredNormalized.every((req) => normalized.includes(req));
-      if (hasAny && satisfies) return headers;
+      if (hasAny && satisfies) {
+        headerRowIndexCache.set(cacheKey, rowIndex);
+        return headers;
+      }
     } catch {
     }
   }
@@ -146,6 +168,7 @@ export async function POST(
 
   try {
     await sheet.addRow(row as any);
+    invalidateRowsCache(sheetTitle);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("master POST failed", { entity, sheetTitle }, err);
@@ -197,6 +220,7 @@ export async function PATCH(
   }
   try {
     await (row as any).save();
+    invalidateRowsCache(sheetTitle);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("master PATCH failed", { entity, sheetTitle, rowNumber }, err);
@@ -237,6 +261,7 @@ export async function DELETE(
   if (!row) return NextResponse.json({ error: "Row not found" }, { status: 404 });
   try {
     await (row as any).delete();
+    invalidateRowsCache(sheetTitle);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("master DELETE failed", { entity, sheetTitle, rowNumber }, err);
