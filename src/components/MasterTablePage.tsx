@@ -5,7 +5,6 @@ import { useSession } from "next-auth/react";
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 
 import ExportCsvButton from "@/components/ExportCsvButton";
-import { useToast } from "@/components/ToastProvider";
 
 type Props = {
   title: string;
@@ -23,14 +22,6 @@ function includesCI(haystack: unknown, needle: string) {
   const n = needle.trim().toLowerCase();
   if (!n) return true;
   return h.includes(n);
-}
-
-function useIsMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  return mounted;
 }
 
 function humanizeKey(key: string) {
@@ -65,15 +56,8 @@ function getRowNumber(row: Row): number | null {
 }
 
 export default function MasterTablePage({ title, description, entity, fileName }: Props) {
-  const isMounted = useIsMounted();
   const { data: session } = useSession();
-  const toast = useToast();
   const isAdmin = (session?.user?.role ?? "").toUpperCase() === "ADMIN";
-  const isScoped = useMemo(() => {
-    const r = (session?.user?.role ?? "").toUpperCase();
-    return r === "KEPALA_KLINIK" || r === "DOKTER_FUNGSIONAL";
-  }, [session?.user?.role]);
-  const scopedWilayah = (session?.user?.wilayahKerja ?? "").trim();
 
   const wilayahKerjaOptions = useMemo(() => {
     if (entity !== "users") return [];
@@ -92,7 +76,7 @@ export default function MasterTablePage({ title, description, entity, fileName }
   const [headers, setHeaders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [pageSize, setPageSize] = useState<10 | 20 | 30 | 50 | 100>(10);
+  const [pageSize, setPageSize] = useState<10 | 30 | 50 | 100>(10);
   const [pageIndex, setPageIndex] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -210,10 +194,6 @@ export default function MasterTablePage({ title, description, entity, fileName }
     const initial: Record<string, string> = {};
     for (const k of columns) {
       if (k === "daop" || k === "daop  ") initial[k] = "DAOP 2 BANDUNG";
-      // Auto-fill wilayah_kerja / klinik untuk role terbatas
-      else if (isScoped && (k === "wilayah_kerja" || k === "klinik") && scopedWilayah) {
-        initial[k] = scopedWilayah;
-      }
       else initial[k] = "";
     }
     setForm(initial);
@@ -221,18 +201,12 @@ export default function MasterTablePage({ title, description, entity, fileName }
   }
 
   function openEdit(row: Row) {
-    console.log(`[OPEN_EDIT] Row data:`, row);
     setActionError(null);
     setMode("edit");
     setEditingRow(row);
     const initial: Record<string, string> = {};
     for (const k of columns) {
       initial[k] = String(row[k] ?? "");
-    }
-    // Auto-fill wilayah_kerja / klinik untuk role terbatas jika kosong
-    if (isScoped && scopedWilayah) {
-      if (!initial["wilayah_kerja"]) initial["wilayah_kerja"] = scopedWilayah;
-      if (!initial["klinik"]) initial["klinik"] = scopedWilayah;
     }
     setForm(initial);
     setModalOpen(true);
@@ -248,7 +222,6 @@ export default function MasterTablePage({ title, description, entity, fileName }
   async function submit() {
     setActionError(null);
     setActionBusy(true);
-    console.log(`[SUBMIT] Mode: ${mode}, form:`, form);
     try {
       if (mode === "create") {
         const res = await fetch(`/api/master/${entity}`, {
@@ -258,18 +231,13 @@ export default function MasterTablePage({ title, description, entity, fileName }
         });
         const data = (await res.json().catch(() => ({}))) as ApiResponse;
         if (!res.ok) {
-          console.error("[SUBMIT] POST failed:", data.error);
           setActionError(data.error ?? "Gagal menyimpan data.");
-          toast.error(data.error ?? "Gagal menyimpan data.", "Gagal");
           return;
         }
-        toast.success("Data berhasil ditambahkan.", "Sukses");
       } else {
         const rowNumber = editingRow ? getRowNumber(editingRow) : null;
-        console.log(`[SUBMIT] PATCH rowNumber: ${rowNumber}, data:`, form);
         if (!rowNumber) {
           setActionError("RowNumber tidak ditemukan.");
-          toast.error("RowNumber tidak ditemukan.", "Gagal");
           return;
         }
         const res = await fetch(`/api/master/${entity}`, {
@@ -279,27 +247,14 @@ export default function MasterTablePage({ title, description, entity, fileName }
         });
         const data = (await res.json().catch(() => ({}))) as ApiResponse;
         if (!res.ok) {
-          console.error("[SUBMIT] PATCH failed:", data.error);
           setActionError(data.error ?? "Gagal menyimpan perubahan.");
-          toast.error(data.error ?? "Gagal menyimpan perubahan.", "Gagal");
           return;
         }
-        toast.success("Perubahan berhasil disimpan.", "Sukses");
       }
-      
-      console.log("[SUBMIT] Success, closing modal and reloading...");
+      await reload();
       setModalOpen(false);
-      
-      try {
-        await reload();
-        console.log("[SUBMIT] Reload finished");
-      } catch (err) {
-        console.error("[SUBMIT] Reload failed:", err);
-      }
-    } catch (err) {
-      console.error("[SUBMIT] Unexpected error:", err);
+    } catch {
       setActionError("Gagal memproses permintaan.");
-      toast.error("Gagal memproses permintaan.", "Gagal");
     } finally {
       setActionBusy(false);
     }
@@ -315,7 +270,6 @@ export default function MasterTablePage({ title, description, entity, fileName }
     const rowNumber = deletingRow ? getRowNumber(deletingRow) : null;
     if (!rowNumber) {
       setActionError("RowNumber tidak ditemukan.");
-      toast.error("RowNumber tidak ditemukan.", "Gagal");
       setConfirmOpen(false);
       return;
     }
@@ -330,44 +284,29 @@ export default function MasterTablePage({ title, description, entity, fileName }
       const data = (await res.json().catch(() => ({}))) as ApiResponse;
       if (!res.ok) {
         setActionError(data.error ?? "Gagal menghapus data.");
-        toast.error(data.error ?? "Gagal menghapus data.", "Gagal");
         return;
       }
-      toast.success("Data berhasil dihapus.", "Sukses");
-      try {
-        await reload();
-      } catch (err) {
-        console.error("Reload failed", err);
-      }
+      await reload();
       setConfirmOpen(false);
     } catch {
       setActionError("Gagal menghapus data.");
-      toast.error("Gagal menghapus data.", "Gagal");
     } finally {
       setActionBusy(false);
     }
   }
 
-  if (!isMounted) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm font-medium text-base-content/60">Menyiapkan halaman...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground">{title}</h1>
-          <p className="text-sm md:text-base text-foreground/70 font-medium max-w-2xl">{description}</p>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight text-base-content">{title}</h1>
+          <p className="text-sm md:text-base text-base-content/60 font-medium max-w-2xl">{description}</p>
         </div>
         <div className="flex items-center gap-2">
-          {(isAdmin || isScoped) && (
+          {isAdmin && (
             <button
-              className="button button--primary"
+              className="button button--primary rounded-2xl"
               onClick={openCreate}
               disabled={loading || actionBusy}
             >
@@ -378,13 +317,13 @@ export default function MasterTablePage({ title, description, entity, fileName }
           <ExportCsvButton
             rows={filtered as any}
             fileName={fileName}
-            className="button button--outline"
+            className="button button--outline rounded-2xl"
           />
         </div>
       </div>
 
       {actionError && (
-        <div role="alert" className="rounded-2xl border border-danger bg-danger text-danger-foreground px-4 py-3 text-sm">
+        <div role="alert" className="rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-sm text-error">
           <div className="font-semibold">{actionError}</div>
         </div>
       )}
@@ -394,23 +333,20 @@ export default function MasterTablePage({ title, description, entity, fileName }
         <div className="p-6">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="md:col-span-2">
-              <label
-                htmlFor="search"
-                className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60"
-              >
+              <label htmlFor="search" className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-primary/80">
                 Pencarian
               </label>
               <div className="relative">
                 <Search
                   aria-hidden="true"
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground/60"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-base-content/30"
                   size={18}
                 />
                 <input
                   id="search"
                   name="q"
                   autoComplete="off"
-                  className="input w-full h-12 rounded-2xl pl-12 pr-4"
+                  className="input w-full h-12 rounded-2xl bg-base-200/40 border border-base-content/10 pl-12 pr-4 focus:border-primary/30 focus:bg-base-100"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Cari (nama, DAOP, UPT, role)…"
@@ -418,8 +354,8 @@ export default function MasterTablePage({ title, description, entity, fileName }
               </div>
             </div>
             <div className="md:col-span-1 flex items-end">
-              <div className="w-full rounded-2xl bg-surface border border-border px-4 py-3">
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-foreground/60">Total</div>
+              <div className="w-full rounded-2xl bg-base-200/40 border border-base-content/10 px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/70">Total</div>
                 <div className="mt-1 text-2xl font-black tracking-tight tabular-nums text-primary">
                   {loading ? "…" : totalRows}
                 </div>
@@ -429,16 +365,15 @@ export default function MasterTablePage({ title, description, entity, fileName }
 
           <div className="mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-foreground/60">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/70">
                 Baris / halaman
               </div>
               <select
-                className="input h-10 rounded-2xl px-3"
+                className="input h-10 rounded-2xl bg-base-200/40 border border-base-content/10 px-3 focus:border-primary/30 focus:bg-base-100"
                 value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value) as 10 | 20 | 30 | 50 | 100)}
+                onChange={(e) => setPageSize(Number(e.target.value) as 10 | 30 | 50 | 100)}
               >
                 <option value={10}>10</option>
-                <option value={20}>20</option>
                 <option value={30}>30</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>
@@ -446,13 +381,13 @@ export default function MasterTablePage({ title, description, entity, fileName }
             </div>
 
             <div className="flex items-center justify-between md:justify-end gap-3">
-              <div className="text-sm font-semibold text-foreground">
+              <div className="text-sm font-semibold text-base-content">
                 Halaman <span className="tabular-nums">{safePageIndex + 1}</span> /{" "}
                 <span className="tabular-nums">{totalPages}</span>
               </div>
-              <div className="flex items-center">
+              <div className="inline-flex">
                 <button
-                  className="button button--outline rounded-l-2xl rounded-r-none"
+                  className="button button--outline button--sm rounded-l-2xl rounded-r-none"
                   onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
                   disabled={loading || actionBusy || safePageIndex === 0}
                   aria-label="Sebelumnya"
@@ -460,7 +395,7 @@ export default function MasterTablePage({ title, description, entity, fileName }
                   <ChevronLeft aria-hidden="true" className="h-5 w-5" />
                 </button>
                 <button
-                  className="button button--outline rounded-r-2xl rounded-l-none"
+                  className="button button--outline button--sm rounded-r-2xl rounded-l-none"
                   onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
                   disabled={loading || actionBusy || safePageIndex >= totalPages - 1}
                   aria-label="Berikutnya"
@@ -477,17 +412,17 @@ export default function MasterTablePage({ title, description, entity, fileName }
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border">
+              <tr className="bg-base-200/50 border-b border-base-content/5">
                 {columns.map((c) => (
                   <th
                     key={c}
-                    className="py-5 px-4 text-left text-xs font-black uppercase tracking-[0.22em] text-foreground/60"
+                    className="py-5 text-xs font-black uppercase tracking-[0.22em] text-primary/80"
                   >
                     {humanizeKey(c)}
                   </th>
                 ))}
-                {(isAdmin || isScoped) && (
-                  <th className="py-5 px-4 text-left text-xs font-black uppercase tracking-[0.22em] text-foreground/60">
+                {isAdmin && (
+                  <th className="py-5 text-xs font-black uppercase tracking-[0.22em] text-primary/80">
                     Aksi
                   </th>
                 )}
@@ -496,7 +431,7 @@ export default function MasterTablePage({ title, description, entity, fileName }
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={Math.max(1, columns.length + ((isAdmin || isScoped) ? 1 : 0))} className="py-20 text-center">
+                  <td colSpan={Math.max(1, columns.length + (isAdmin ? 1 : 0))} className="py-20 text-center">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <Loader2 aria-hidden="true" className="animate-spin text-primary" size={32} />
                       <span className="text-sm font-medium text-base-content/60">Memuat data…</span>
@@ -506,16 +441,16 @@ export default function MasterTablePage({ title, description, entity, fileName }
               ) : pagedRows.length ? (
                 pagedRows.map((r, idx) => (
                   <tr
-                    key={String(r["_rowNumber"] ?? idx)}
-                    className="hover:bg-primary/5 transition-colors"
+                    key={String(r["id"] || r["id_klinik"] || r["upt"] || r["nipp"] || idx)}
+                    className="border-b border-base-content/5 last:border-b-0 hover:bg-primary/5 transition-colors"
                   >
                     {columns.map((c) => (
-                      <td key={c} className="py-4 px-4 text-sm font-medium text-foreground">
+                      <td key={c} className="py-4 text-sm font-medium text-base-content">
                         <div className="min-w-0 break-words">{String(r[c] ?? "").trim() || "-"}</div>
                       </td>
                     ))}
-                    {(isAdmin || isScoped) && (
-                      <td className="py-3 px-4">
+                    {isAdmin && (
+                      <td className="py-3">
                         <div className="flex items-center gap-2">
                           <button
                             className="button button--ghost button--icon-only button--sm rounded-full"
@@ -540,8 +475,8 @@ export default function MasterTablePage({ title, description, entity, fileName }
                 ))
               ) : (
                 <tr>
-                  <td colSpan={Math.max(1, columns.length + ((isAdmin || isScoped) ? 1 : 0))} className="py-20 text-center">
-                    <div className="text-foreground/60">
+                  <td colSpan={Math.max(1, columns.length + (isAdmin ? 1 : 0))} className="py-20 text-center">
+                    <div className="text-base-content/60">
                       Data tidak ditemukan. Coba ubah kata kunci pencarian.
                     </div>
                   </td>
@@ -554,19 +489,17 @@ export default function MasterTablePage({ title, description, entity, fileName }
 
       {modalOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => (actionBusy ? null : setModalOpen(false))} />
-          <div className="relative w-full max-w-3xl rounded-3xl border border-border bg-surface shadow-2xl p-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => (actionBusy ? null : setModalOpen(false))} />
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border bg-surface shadow-2xl p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-lg font-black tracking-tight text-foreground uppercase">
-                  {mode === "create" ? "Tambah Data Baru" : "Edit Data Eksisting"}
+                <div className="text-lg font-black tracking-tight text-foreground">
+                  {mode === "create" ? "Tambah Data" : "Edit Data"}
                 </div>
-                <div className="mt-1 text-sm font-medium text-foreground/70">
-                  Entity: <span className="font-bold text-primary">{entity.toUpperCase()}</span> | {title}
-                </div>
+                <div className="mt-1 text-sm font-medium text-foreground/60">{title}</div>
               </div>
               <button
-                className="button button--ghost button--icon-only rounded-full"
+                className="button button--ghost button--icon-only button--sm rounded-full"
                 aria-label="Tutup"
                 onClick={() => setModalOpen(false)}
                 disabled={actionBusy}
@@ -588,18 +521,18 @@ export default function MasterTablePage({ title, description, entity, fileName }
                 if (isRole) {
                   return (
                     <div key={k} className={colSpan}>
-                      <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60">
+                      <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-primary/80">
                         {humanizeKey(k)}
                       </label>
                       <select
-                        className="input w-full rounded-2xl px-3"
+                        className="input w-full h-12 rounded-2xl bg-base-200/40 border border-base-content/10 px-3 focus:border-primary/30 focus:bg-base-100"
                         value={form[k] ?? ""}
                         onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
                       >
                         <option value="" disabled>
                           Pilih Role
                         </option>
-                        {["ADMIN", "MANAGER", "ASMEN", "KEPALA_KLINIK", "DOKTER_FUNGSIONAL"].map((x) => (
+                        {["ADMIN", "MANAGER", "ASMEN", "KEPALA_KLINIK"].map((x) => (
                           <option key={x} value={x}>
                             {x}
                           </option>
@@ -612,11 +545,11 @@ export default function MasterTablePage({ title, description, entity, fileName }
                 if (isWilayahKerja) {
                   return (
                     <div key={k} className={colSpan}>
-                      <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60">
+                      <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-primary/80">
                         {humanizeKey(k)}
                       </label>
                       <select
-                        className="input w-full rounded-2xl px-3"
+                        className="input w-full h-12 rounded-2xl bg-base-200/40 border border-base-content/10 px-3 focus:border-primary/30 focus:bg-base-100"
                         value={form[k] ?? ""}
                         onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
                       >
@@ -636,11 +569,11 @@ export default function MasterTablePage({ title, description, entity, fileName }
                 if (isKlinikField && klinikNames.length) {
                   return (
                     <div key={k} className={colSpan}>
-                      <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60">
+                      <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-primary/80">
                         {humanizeKey(k)}
                       </label>
                       <select
-                        className="input w-full rounded-2xl px-3"
+                        className="input w-full h-12 rounded-2xl bg-base-200/40 border border-base-content/10 px-3 focus:border-primary/30 focus:bg-base-100"
                         value={form[k] ?? ""}
                         onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
                       >
@@ -659,29 +592,24 @@ export default function MasterTablePage({ title, description, entity, fileName }
 
                 return (
                   <div key={k} className={colSpan}>
-                    <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60">
+                    <label className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-primary/80">
                       {humanizeKey(k)}
                     </label>
                     <input
-                      className="input w-full h-12 rounded-2xl px-4"
+                      className="input w-full h-12 rounded-2xl bg-base-200/40 border border-base-content/10 px-4 focus:border-primary/30 focus:bg-base-100"
                       type={isPassword ? "password" : "text"}
                       value={form[k] ?? ""}
                       onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))}
-                      readOnly={isDaop || isAutoId || (isScoped && (k === "wilayah_kerja" || k === "klinik"))}
-                      disabled={isDaop || isAutoId || (isScoped && (k === "wilayah_kerja" || k === "klinik"))}
-                      placeholder={
-                        isDaop ? "DAOP 2 BANDUNG"
-                        : isAutoId ? "Auto (USR-0001, USR-0002, ...)"
-                        : (isScoped && (k === "wilayah_kerja" || k === "klinik")) ? scopedWilayah
-                        : undefined
-                      }
+                      readOnly={isDaop || isAutoId}
+                      disabled={isDaop || isAutoId}
+                      placeholder={isDaop ? "DAOP 2 BANDUNG" : isAutoId ? "Auto (USR-0001, USR-0002, ...)" : undefined}
                     />
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2">
               <button className="button button--ghost" onClick={() => setModalOpen(false)} disabled={actionBusy}>
                 Batal
               </button>
@@ -695,16 +623,14 @@ export default function MasterTablePage({ title, description, entity, fileName }
 
       {confirmOpen && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => (actionBusy ? null : setConfirmOpen(false))} />
-          <div className="relative w-full max-w-lg rounded-3xl border border-border bg-surface shadow-2xl p-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => (actionBusy ? null : setConfirmOpen(false))} />
+          <div className="relative w-full max-w-md rounded-3xl border border-border bg-surface shadow-2xl p-6">
             <div className="text-lg font-black tracking-tight text-foreground">Hapus Data</div>
-            <div className="mt-2 text-sm font-medium text-foreground/70">
-              Data akan dihapus permanen dari Google Sheet.
-            </div>
-            <div className="mt-5 rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground/70">
+            <div className="mt-2 text-sm font-medium text-foreground/60">Data akan dihapus permanen dari Google Sheet.</div>
+            <div className="mt-5 rounded-2xl border border-border bg-surface-secondary px-4 py-3 text-sm text-foreground/70">
               RowNumber: <span className="font-bold tabular-nums">{String(getRowNumber(deletingRow ?? {}) ?? "-")}</span>
             </div>
-            <div className="mt-6 flex items-center justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2">
               <button className="button button--ghost" onClick={() => setConfirmOpen(false)} disabled={actionBusy}>
                 Batal
               </button>
