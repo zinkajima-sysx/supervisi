@@ -1,5 +1,6 @@
 export function isKepalaKlinik(role?: string) {
-  return (role ?? "").toUpperCase() === "KEPALA_KLINIK";
+  const r = (role ?? "").toUpperCase();
+  return r === "KEPALA_KLINIK" || r === "DOKTER_FUNGSIONAL";
 }
 
 export function filterRowsByWilayah<T extends Record<string, any>>(

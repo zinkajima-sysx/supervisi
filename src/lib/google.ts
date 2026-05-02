@@ -1,6 +1,5 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
-import { google } from "googleapis";
 
 import { getServiceAccountCredentials, requireEnvClean } from "@/lib/env";
 
@@ -30,13 +29,3 @@ export async function getSpreadsheet() {
   return doc;
 }
 
-export function getDriveClient() {
-  const creds = getServiceAccountCredentials();
-  const auth = new google.auth.JWT({
-    email: creds.email,
-    key: creds.key,
-    scopes: ["https://www.googleapis.com/auth/drive"],
-  });
-
-  return google.drive({ version: "v3", auth });
-}

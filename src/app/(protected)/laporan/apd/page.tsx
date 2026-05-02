@@ -6,18 +6,28 @@ import {
   Search, 
   Calendar, 
   Filter, 
-  Download, 
   ExternalLink,
   FileText,
   Database,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  BarChart3,
 } from "lucide-react";
 
 import ExportCsvButton, { type CsvColumn } from "@/components/ExportCsvButton";
 
 type ApiResponse = { rows: Record<string, any>[] };
+type StatusResponse = {
+  sudah: string[];
+  belum: string[];
+  total: number;
+  persen: number;
+  semester: number;
+  year: number;
+};
 
 function includesCI(haystack: any, needle: string) {
   const h = String(haystack ?? "").toLowerCase();
@@ -36,9 +46,19 @@ export default function LaporanApdPage() {
   const [pageSize, setPageSize] = useState<10 | 30 | 50 | 100>(10);
   const [pageIndex, setPageIndex] = useState(0);
   const [klinikById, setKlinikById] = useState<Record<string, string>>({});
+  const [statusData, setStatusData] = useState<StatusResponse | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"data" | "status">("data");
+
+  const now = new Date();
+  const currentSemester = now.getMonth() < 6 ? 1 : 2;
+  const currentYear = now.getFullYear();
 
   const isKepala = useMemo(
-    () => (session?.user?.role ?? "").toUpperCase() === "KEPALA_KLINIK",
+    () => {
+      const r = (session?.user?.role ?? "").toUpperCase();
+      return r === "KEPALA_KLINIK" || r === "DOKTER_FUNGSIONAL";
+    },
     [session?.user?.role]
   );
 
@@ -86,6 +106,18 @@ export default function LaporanApdPage() {
   useEffect(() => {
     setDaop("DAOP 2 BANDUNG");
   }, [isKepala, session?.user?.wilayahKerja]);
+
+  // Fetch status UPT supervisi semester ini
+  useEffect(() => {
+    let cancelled = false;
+    setStatusLoading(true);
+    fetch(`/api/supervisi/status?type=apd&year=${currentYear}&semester=${currentSemester}`)
+      .then((r) => r.json())
+      .then((data: StatusResponse) => { if (!cancelled) setStatusData(data); })
+      .catch(() => { if (!cancelled) setStatusData(null); })
+      .finally(() => { if (!cancelled) setStatusLoading(false); });
+    return () => { cancelled = true; };
+  }, [currentYear, currentSemester]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -203,233 +235,225 @@ export default function LaporanApdPage() {
   }, [filtered, safePageIndex, pageSize]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      {/* Header Section */}
+    <div className="space-y-5 animate-in fade-in duration-700">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-primary">
-            <FileText size={20} />
-            <span className="text-sm font-bold uppercase tracking-wider">Reports</span>
+            <FileText size={18} />
+            <span className="text-xs font-bold uppercase tracking-wider">Reports</span>
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-base-content">
+          <h1 className="text-2xl font-black tracking-tight text-base-content">
             Laporan <span className="text-primary">APD</span>
           </h1>
-          <p className="text-base-content/60 max-w-lg">
-            Analisis data penggunaan Alat Pelindung Diri di seluruh wilayah operasional.
+          <p className="text-xs text-base-content/60">
+            Semester {currentSemester} — {currentYear} &nbsp;·&nbsp; {isKepala ? "Klinik kamu" : "Semua wilayah"}
           </p>
         </div>
-        
-        <div className="flex items-center gap-3 bg-base-200/50 p-2 rounded-2xl backdrop-blur-sm border border-base-content/5">
-          <div className="px-4 py-2">
-            <span className="text-xs font-semibold block text-base-content/50 uppercase">Total Records</span>
-            <span className="text-xl font-bold text-primary tabular-nums">
-              {loading ? "..." : filtered.length}
-            </span>
+        <div className="flex items-center gap-2 bg-base-200 p-2 rounded-xl border border-border">
+          <div className="px-3 py-1.5">
+            <span className="text-[10px] font-semibold block text-base-content/50 uppercase">Total Records</span>
+            <span className="text-lg font-bold text-primary tabular-nums">{loading ? "..." : filtered.length}</span>
           </div>
-          <div className="divider divider-horizontal mx-0 h-10 self-center"></div>
-          <ExportCsvButton 
-            rows={filtered} 
-            fileName="laporan-apd.csv" 
-            columns={exportColumns}
-            className="btn btn-primary rounded-xl shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
-          />
+          <div className="h-8 self-center w-px bg-border" />
+          <ExportCsvButton rows={filtered} fileName="laporan-apd.csv" columns={exportColumns} className="button button--primary button--sm" />
         </div>
       </div>
 
-      {/* Filters Section */}
-      <div className="glass-card overflow-visible">
-        <div className="p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="p-2 bg-primary/10 rounded-lg text-primary">
-              <Filter size={18} />
-            </div>
-            <h2 className="text-lg font-bold">Filter Pencarian</h2>
-          </div>
-          
-          <div className="grid gap-6 md:grid-cols-3">
-            <div className="form-control w-full">
-              <label className="label py-1">
-                <span className="label-text font-black text-primary/80 flex items-center gap-2">
-                  <Database aria-hidden="true" size={14} className="text-primary" />
-                  DAOP / DIVRE
-                </span>
-              </label>
-              <div className="relative group">
-                <input
-                  className={`input input-bordered w-full pl-10 rounded-xl bg-base-200/30 focus:bg-base-100 transition-all border-base-content/10 ${isKepala ? 'opacity-70 grayscale' : ''}`}
-                  value={daop}
-                  onChange={(e) => setDaop(e.target.value)}
-                  disabled={true}
-                  placeholder="DAOP 2 BANDUNG"
-                />
-                <Database aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30 group-focus-within:text-primary transition-colors" size={18} />
-              </div>
-            </div>
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-xl bg-base-200 border border-border w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab("data")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === "data" ? "bg-surface shadow text-primary" : "text-foreground/60 hover:text-foreground"}`}
+        >
+          <span className="flex items-center gap-2"><Database size={13} /> Data Laporan</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("status")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === "status" ? "bg-surface shadow text-primary" : "text-foreground/60 hover:text-foreground"}`}
+        >
+          <span className="flex items-center gap-2"><BarChart3 size={13} /> Status UPT Semester Ini</span>
+        </button>
+      </div>
 
-            <div className="form-control w-full">
-              <label className="label py-1">
-                <span className="label-text font-black text-primary/80 flex items-center gap-2">
-                  <Calendar aria-hidden="true" size={14} className="text-primary" />
-                  Tanggal Supervisi
-                </span>
-              </label>
-              <div className="relative group">
-                <input
-                  type="date"
-                  className="input input-bordered w-full pl-10 rounded-xl bg-base-200/30 focus:bg-base-100 transition-all border-base-content/10"
-                  value={tanggal}
-                  onChange={(e) => setTanggal(e.target.value)}
-                />
-                <Calendar aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30 group-focus-within:text-primary transition-colors" size={18} />
+      {/* Tab: Status UPT */}
+      {activeTab === "status" && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="rounded-2xl border border-border bg-surface shadow-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-foreground/50">Progress Supervisi APD</div>
+                <div className="text-lg font-black text-foreground mt-0.5">
+                  Semester {currentSemester} — {currentYear}
+                </div>
               </div>
+              {statusData && (
+                <div className="text-right">
+                  <div className="text-3xl font-black text-primary tabular-nums">{statusData.persen}%</div>
+                  <div className="text-[10px] text-foreground/50">{statusData.sudah.length} / {statusData.total} UPT</div>
+                </div>
+              )}
             </div>
-
-            <div className="form-control w-full">
-              <label className="label py-1">
-                <span className="label-text font-black text-primary/80 flex items-center gap-2">
-                  <Search aria-hidden="true" size={14} className="text-primary" />
-                  Pencarian UPT
-                </span>
-              </label>
-              <div className="relative group">
-                <input
-                  className="input input-bordered w-full pl-10 rounded-xl bg-base-200/30 focus:bg-base-100 transition-all border-base-content/10"
-                  value={upt}
-                  onChange={(e) => setUpt(e.target.value)}
-                  placeholder="Ketik nama UPT..."
-                />
-                <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30 group-focus-within:text-primary transition-colors" size={18} />
+            {statusData && (
+              <div className="h-2 w-full bg-base-200 rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-700" style={{ width: `${statusData.persen}%` }} />
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/70">
-                Baris / halaman
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Sudah Supervisi */}
+            <div className="rounded-2xl border border-success/20 bg-success/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 size={16} className="text-success" />
+                <span className="text-xs font-black uppercase tracking-widest text-success">
+                  Sudah Supervisi ({statusLoading ? "..." : statusData?.sudah.length ?? 0})
+                </span>
               </div>
-              <select
-                className="select select-bordered h-10 rounded-2xl bg-base-200/30 border-base-content/10 focus:border-primary/30 focus:bg-base-100"
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value) as 10 | 30 | 50 | 100)}
-              >
-                <option value={10}>10</option>
-                <option value={30}>30</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
+              {statusLoading ? (
+                <div className="flex items-center gap-2 text-xs text-foreground/50"><Loader2 size={14} className="animate-spin" /> Memuat...</div>
+              ) : statusData?.sudah.length ? (
+                <ul className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {statusData.sudah.map((u) => (
+                    <li key={u} className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                      <div className="h-1.5 w-1.5 rounded-full bg-success shrink-0" />
+                      {u}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-foreground/40 italic">Belum ada UPT yang disupervisi semester ini.</p>
+              )}
+            </div>
+
+            {/* Belum Supervisi */}
+            <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <XCircle size={16} className="text-warning" />
+                <span className="text-xs font-black uppercase tracking-widest text-warning">
+                  Belum Supervisi ({statusLoading ? "..." : statusData?.belum.length ?? 0})
+                </span>
+              </div>
+              {statusLoading ? (
+                <div className="flex items-center gap-2 text-xs text-foreground/50"><Loader2 size={14} className="animate-spin" /> Memuat...</div>
+              ) : statusData?.belum.length ? (
+                <ul className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {statusData.belum.map((u) => (
+                    <li key={u} className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                      <div className="h-1.5 w-1.5 rounded-full bg-warning shrink-0" />
+                      {u}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-success font-bold">🎉 Semua UPT sudah disupervisi semester ini!</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Data Laporan */}
+      {activeTab === "data" && (
+        <>
+      <div className="rounded-2xl border border-border bg-surface shadow-lg overflow-visible">
+        <div className="p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-1.5 bg-primary rounded-lg text-primary-content">
+              <Filter size={15} />
+            </div>
+            <h2 className="text-sm font-bold">Filter Pencarian</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="w-full">
+              <label className="block py-1 text-[10px] font-black uppercase tracking-widest text-foreground/60">DAOP / DIVRE</label>
+              <div className="relative">
+                <input className="input w-full pl-9 rounded-xl text-sm" value={daop} onChange={(e) => setDaop(e.target.value)} disabled placeholder="DAOP 2 BANDUNG" />
+                <Database aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30" size={15} />
+              </div>
+            </div>
+            <div className="w-full">
+              <label className="block py-1 text-[10px] font-black uppercase tracking-widest text-foreground/60">Tanggal Supervisi</label>
+              <div className="relative">
+                <input type="date" className="input w-full pl-9 rounded-xl text-sm" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
+                <Calendar aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30" size={15} />
+              </div>
+            </div>
+            <div className="w-full">
+              <label className="block py-1 text-[10px] font-black uppercase tracking-widest text-foreground/60">Pencarian UPT</label>
+              <div className="relative">
+                <input className="input w-full pl-9 rounded-xl text-sm" value={upt} onChange={(e) => setUpt(e.target.value)} placeholder="Ketik nama UPT..." />
+                <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30" size={15} />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/70">Baris / halaman</div>
+              <select className="input h-9 rounded-xl px-3 text-sm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value) as 10 | 30 | 50 | 100)}>
+                <option value={10}>10</option><option value={30}>30</option><option value={50}>50</option><option value={100}>100</option>
               </select>
             </div>
-
-            <div className="flex items-center justify-between md:justify-end gap-3">
-              <div className="text-sm font-semibold text-base-content">
-                Halaman <span className="tabular-nums">{safePageIndex + 1}</span> /{" "}
-                <span className="tabular-nums">{totalPages}</span>
-              </div>
-              <div className="join">
-                <button
-                  className="btn btn-primary btn-outline join-item rounded-l-2xl"
-                  onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-                  disabled={loading || safePageIndex === 0}
-                  aria-label="Sebelumnya"
-                >
-                  <ChevronLeft aria-hidden="true" className="h-5 w-5" />
-                </button>
-                <button
-                  className="btn btn-primary btn-outline join-item rounded-r-2xl"
-                  onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={loading || safePageIndex >= totalPages - 1}
-                  aria-label="Berikutnya"
-                >
-                  <ChevronRight aria-hidden="true" className="h-5 w-5" />
-                </button>
+            <div className="flex items-center gap-3">
+              <div className="text-xs font-semibold text-base-content">Hal. {safePageIndex + 1} / {totalPages}</div>
+              <div className="flex items-center">
+                <button className="button button--outline rounded-l-xl rounded-r-none" onClick={() => setPageIndex((p) => Math.max(0, p - 1))} disabled={loading || safePageIndex === 0} aria-label="Sebelumnya"><ChevronLeft className="h-4 w-4" /></button>
+                <button className="button button--outline rounded-r-xl rounded-l-none" onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))} disabled={loading || safePageIndex >= totalPages - 1} aria-label="Berikutnya"><ChevronRight className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Table Section */}
-      <div className="glass-card overflow-hidden">
+      <div className="rounded-2xl border border-border bg-surface shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="table table-zebra w-full">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="bg-base-200/50 border-b border-base-content/5">
-                <th className="py-5 pl-6 text-xs font-black uppercase tracking-[0.22em] text-primary/80">Tanggal</th>
-                <th className="py-5 text-xs font-black uppercase tracking-[0.22em] text-primary/80">Wilayah (DAOP)</th>
-                <th className="py-5 text-xs font-black uppercase tracking-[0.22em] text-primary/80">Nama UPT</th>
-                <th className="py-5 text-xs font-black uppercase tracking-[0.22em] text-primary/80">Petugas</th>
-                <th className="py-5 pr-6 text-xs font-black uppercase tracking-[0.22em] text-primary/80 text-right">Dokumentasi</th>
+              <tr className="border-b border-border">
+                <th className="py-3 pl-4 text-left text-xs font-black uppercase tracking-[0.22em] text-foreground/60">Tanggal</th>
+                <th className="py-3 text-left text-xs font-black uppercase tracking-[0.22em] text-foreground/60">DAOP</th>
+                <th className="py-3 text-left text-xs font-black uppercase tracking-[0.22em] text-foreground/60">Nama UPT</th>
+                <th className="py-3 text-left text-xs font-black uppercase tracking-[0.22em] text-foreground/60">Petugas</th>
+                <th className="py-3 pr-4 text-right text-xs font-black uppercase tracking-[0.22em] text-foreground/60">Foto</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="py-20 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3">
-                      <Loader2 className="animate-spin text-primary" size={32} />
-                      <span className="text-sm font-medium opacity-50">Menyinkronkan data...</span>
-                    </div>
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="py-16 text-center"><div className="flex flex-col items-center gap-2"><Loader2 className="animate-spin text-primary" size={28} /><span className="text-xs font-medium opacity-50">Menyinkronkan data...</span></div></td></tr>
               ) : pagedRows.length ? (
                 pagedRows.map((r, idx) => (
-                  <tr
-                    key={String(r._rowNumber ?? r.laporan_id ?? r.timestamp ?? `${r.id ?? "row"}-${idx}`)}
-                    className="hover:bg-primary/5 transition-colors group"
-                  >
-                    <td className="py-4 pl-6 font-semibold tabular-nums text-base-content">
-                      {String(r.tanggal_supervisi ?? r.timestamp ?? "").slice(0, 10)}
-                    </td>
-                    <td className="py-4">
-                      <div className="badge badge-ghost badge-sm rounded-md border-base-content/10 font-bold uppercase tracking-tight">
-                        {String(r.daop ?? r.daop_divre ?? "").trim() || "-"}
-                      </div>
-                    </td>
-                    <td className="py-4">
-                      <span className="font-bold text-base-content">{String(r.upt ?? r.nama_upt ?? "").trim() || "-"}</span>
-                    </td>
-                    <td className="py-4">
+                  <tr key={String(r._rowNumber ?? r.laporan_id ?? r.timestamp ?? `${r.id ?? "row"}-${idx}`)} className="hover:bg-primary/5 transition-colors border-b border-border/50 last:border-0">
+                    <td className="py-3 pl-4 font-semibold tabular-nums text-xs">{String(r.tanggal_supervisi ?? r.timestamp ?? "").slice(0, 10)}</td>
+                    <td className="py-3"><div className="inline-flex items-center rounded border border-border px-1.5 py-0.5 font-bold text-[10px] uppercase text-foreground/70">{String(r.daop ?? r.daop_divre ?? "").trim() || "-"}</div></td>
+                    <td className="py-3 font-bold text-xs">{String(r.upt ?? r.nama_upt ?? "").trim() || "-"}</td>
+                    <td className="py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary border border-primary/20 uppercase">
+                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary border border-primary/20 uppercase shrink-0">
                           {String(r.petugas_nama ?? r.submitter_nama ?? r.submitter_username ?? "NA").trim().substring(0, 2)}
                         </div>
-                        <span className="text-sm font-semibold text-base-content">
-                          {String(r.petugas_nama ?? r.submitter_nama ?? r.submitter_username ?? "-").trim() || "-"}
-                        </span>
+                        <span className="text-xs font-semibold">{String(r.petugas_nama ?? r.submitter_nama ?? r.submitter_username ?? "-").trim() || "-"}</span>
                       </div>
                     </td>
-                    <td className="py-4 pr-6 text-right">
+                    <td className="py-3 pr-4 text-right">
                       {r.foto_url ? (
-                        <a 
-                          className="btn btn-circle btn-ghost btn-sm text-primary hover:bg-primary hover:text-white" 
-                          href={r.foto_url} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          title="Lihat Foto"
-                        >
-                          <ExternalLink size={16} />
-                        </a>
+                        <a className="button button--ghost button--icon-only button--sm rounded-full text-primary" href={r.foto_url} target="_blank" rel="noreferrer" title="Lihat Foto"><ExternalLink size={14} /></a>
                       ) : (
-                        <span className="text-xs opacity-30 italic">No Media</span>
+                        <span className="text-[10px] opacity-30 italic">-</span>
                       )}
                     </td>
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className="py-20 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2 opacity-30">
-                      <Database size={48} />
-                      <span className="text-lg font-bold italic">Data tidak ditemukan</span>
-                      <p className="text-sm">Gunakan filter yang berbeda untuk menemukan catatan lain.</p>
-                    </div>
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="py-16 text-center"><div className="flex flex-col items-center gap-2 opacity-30"><Database size={36} /><span className="text-sm font-bold italic">Data tidak ditemukan</span></div></td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

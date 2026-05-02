@@ -88,49 +88,46 @@ export default function DashboardComplianceCards({
   const role = String(session?.user?.role ?? "").toUpperCase();
   const wilayahKerja = String(session?.user?.wilayahKerja ?? "").trim();
   const scopeLabel =
-    role === "KEPALA_KLINIK" && wilayahKerja && wilayahKerja.toUpperCase() !== "ALL"
+    (role === "KEPALA_KLINIK" || role === "DOKTER_FUNGSIONAL") && wilayahKerja && wilayahKerja.toUpperCase() !== "ALL"
       ? wilayahKerja
       : "ALL";
 
   const groups = useMemo(() => (loading ? Array.from({ length: 14 }) : data?.groups ?? []), [loading, data?.groups]);
 
   return (
-    <section className="space-y-6">
-      <div className="glass-card p-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-          <div className="space-y-2">
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-border bg-surface shadow-lg p-4">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
+          <div className="space-y-1">
             <div className="flex items-center gap-2 text-primary">
-              <Calendar size={18} />
-              <span className="text-xs font-black uppercase tracking-[0.22em]">Kepatuhan Semester</span>
+              <Calendar size={15} />
+              <span className="text-[10px] font-black uppercase tracking-[0.22em]">Kepatuhan Semester</span>
             </div>
-            <h2 className="text-2xl md:text-3xl font-black tracking-tight text-base-content">
+            <h2 className="text-xl md:text-2xl font-black tracking-tight text-base-content">
               Ringkasan <span className="text-primary">APD &amp; P3K</span>
             </h2>
-            <div className="text-sm font-semibold text-base-content/60">
+            <div className="text-xs font-semibold text-base-content/60">
               Scope: <span className="text-base-content/80">{scopeLabel}</span>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/70">Tahun</div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-primary/70">Tahun</div>
               <select
-                className="select select-bordered h-10 rounded-2xl bg-base-200/30 border-base-content/10 focus:border-primary/30 focus:bg-base-100"
+                className="input h-9 rounded-xl px-3 text-sm"
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
               >
                 {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
+                  <option key={y} value={y}>{y}</option>
                 ))}
               </select>
             </div>
-
-            <div className="flex items-center gap-3">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/70">Semester</div>
+            <div className="flex items-center gap-2">
+              <div className="text-[9px] font-black uppercase tracking-[0.22em] text-primary/70">Semester</div>
               <select
-                className="select select-bordered h-10 rounded-2xl bg-base-200/30 border-base-content/10 focus:border-primary/30 focus:bg-base-100"
+                className="input h-9 rounded-xl px-3 text-sm"
                 value={semester}
                 onChange={(e) => setSemester(Number(e.target.value) as 1 | 2)}
               >
@@ -141,70 +138,31 @@ export default function DashboardComplianceCards({
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div className="rounded-3xl border border-base-content/10 bg-base-200/20 p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/50">
-                P3K Lengkap
+        <div className="mt-4 grid grid-cols-2 xl:grid-cols-4 gap-3">
+          {[
+            { label: "P3K Lengkap", value: data?.totals?.p3k?.lengkap ?? 0, icon: <Stethoscope size={15} />, color: "success" },
+            { label: "P3K Tidak Lengkap", value: data?.totals?.p3k?.tidakLengkap ?? 0, icon: <TriangleAlert size={15} />, color: "error" },
+            { label: "APD Lengkap", value: data?.totals?.apd?.lengkap ?? 0, icon: <ShieldCheck size={15} />, color: "primary" },
+            { label: "APD Tidak Lengkap", value: data?.totals?.apd?.tidakLengkap ?? 0, icon: <ShieldX size={15} />, color: "warning" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-base-content/10 bg-base-200/20 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[9px] font-black uppercase tracking-[0.22em] text-base-content/50 leading-tight">
+                  {item.label}
+                </div>
+                <div className={`h-7 w-7 rounded-lg bg-${item.color}/10 text-${item.color} flex items-center justify-center border border-${item.color}/15 shrink-0`}>
+                  {item.icon}
+                </div>
               </div>
-              <div className="h-10 w-10 rounded-2xl bg-success/10 text-success flex items-center justify-center border border-success/15">
-                <Stethoscope size={18} />
-              </div>
-            </div>
-            <div className="mt-4 text-4xl font-black tracking-tight tabular-nums text-base-content">
-              {loading ? "…" : data?.totals?.p3k?.lengkap ?? 0}
-            </div>
-            <div className="mt-1 text-xs font-semibold text-base-content/55">Total hasil pemeriksaan = LENGKAP</div>
-          </div>
-
-          <div className="rounded-3xl border border-base-content/10 bg-base-200/20 p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/50">
-                P3K Tidak Lengkap
-              </div>
-              <div className="h-10 w-10 rounded-2xl bg-error/10 text-error flex items-center justify-center border border-error/15">
-                <TriangleAlert size={18} />
+              <div className="mt-2 text-3xl font-black tracking-tight tabular-nums text-base-content">
+                {loading ? "…" : item.value}
               </div>
             </div>
-            <div className="mt-4 text-4xl font-black tracking-tight tabular-nums text-base-content">
-              {loading ? "…" : data?.totals?.p3k?.tidakLengkap ?? 0}
-            </div>
-            <div className="mt-1 text-xs font-semibold text-base-content/55">Total hasil pemeriksaan = TIDAK LENGKAP</div>
-          </div>
-
-          <div className="rounded-3xl border border-base-content/10 bg-base-200/20 p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/50">
-                APD Lengkap
-              </div>
-              <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15">
-                <ShieldCheck size={18} />
-              </div>
-            </div>
-            <div className="mt-4 text-4xl font-black tracking-tight tabular-nums text-base-content">
-              {loading ? "…" : data?.totals?.apd?.lengkap ?? 0}
-            </div>
-            <div className="mt-1 text-xs font-semibold text-base-content/55">Semua item wajib = BAIK</div>
-          </div>
-
-          <div className="rounded-3xl border border-base-content/10 bg-base-200/20 p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/50">
-                APD Tidak Lengkap
-              </div>
-              <div className="h-10 w-10 rounded-2xl bg-warning/10 text-warning flex items-center justify-center border border-warning/15">
-                <ShieldX size={18} />
-              </div>
-            </div>
-            <div className="mt-4 text-4xl font-black tracking-tight tabular-nums text-base-content">
-              {loading ? "…" : data?.totals?.apd?.tidakLengkap ?? 0}
-            </div>
-            <div className="mt-1 text-xs font-semibold text-base-content/55">Ada item wajib selain BAIK</div>
-          </div>
+          ))}
         </div>
 
         {err && (
-          <div role="alert" className="mt-6 rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-sm text-error">
+          <div role="alert" className="mt-4 rounded-xl border border-error/25 bg-error/10 px-3 py-2 text-xs text-error">
             <div className="font-semibold">{err}</div>
           </div>
         )}
@@ -215,34 +173,12 @@ export default function DashboardComplianceCards({
           {loading ? "Memuat ringkasan unit kerja…" : `${groups.length} card`}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm rounded-2xl"
-            onClick={() => {
-              const next: Record<string, boolean> = {};
-              for (const g of groups as any[]) {
-                const id = String(g?.groupId ?? "");
-                if (id) next[id] = false;
-              }
-              setCollapsed(next);
-            }}
-            disabled={loading}
-          >
+          <button type="button" className="button button--ghost button--sm rounded-xl text-xs"
+            onClick={() => { const next: Record<string, boolean> = {}; for (const g of groups as any[]) { const id = String(g?.groupId ?? ""); if (id) next[id] = false; } setCollapsed(next); }} disabled={loading}>
             Tampilkan Semua
           </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm rounded-2xl"
-            onClick={() => {
-              const next: Record<string, boolean> = {};
-              for (const g of groups as any[]) {
-                const id = String(g?.groupId ?? "");
-                if (id) next[id] = true;
-              }
-              setCollapsed(next);
-            }}
-            disabled={loading}
-          >
+          <button type="button" className="button button--ghost button--sm rounded-xl text-xs"
+            onClick={() => { const next: Record<string, boolean> = {}; for (const g of groups as any[]) { const id = String(g?.groupId ?? ""); if (id) next[id] = true; } setCollapsed(next); }} disabled={loading}>
             Collapse Semua
           </button>
         </div>
@@ -272,7 +208,7 @@ export default function DashboardComplianceCards({
                 </div>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-xs rounded-xl"
+                  className="button button--ghost button--sm rounded-xl"
                   onClick={() => setCollapsed((p) => ({ ...p, [groupId]: !isCollapsed }))}
                   disabled={loading}
                 >

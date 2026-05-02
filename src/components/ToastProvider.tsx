@@ -35,13 +35,6 @@ function uid() {
   }
 }
 
-function kindToAlert(kind: ToastKind): string {
-  if (kind === "success") return "alert-success";
-  if (kind === "error") return "alert-error";
-  if (kind === "warning") return "alert-warning";
-  return "alert-info";
-}
-
 function kindToIcon(kind: ToastKind) {
   if (kind === "success") return CheckCircle2;
   if (kind === "error") return XCircle;
@@ -106,14 +99,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="toast toast-top toast-end z-[9999]">
+      <div className="fixed top-4 right-4 z-[9999] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3">
         {items.map((t) => {
           const Icon = kindToIcon(t.kind);
+          const kindClass =
+            t.kind === "success"
+              ? "bg-success text-success-foreground border-success"
+              : t.kind === "error"
+                ? "bg-danger text-danger-foreground border-danger"
+                : t.kind === "warning"
+                  ? "bg-warning text-warning-foreground border-warning"
+                  : "bg-accent text-accent-foreground border-accent";
           return (
             <div
               key={t.id}
               role="status"
-              className={`alert ${kindToAlert(t.kind)} shadow-lg border border-base-content/10 bg-base-100`}
+              className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl ${kindClass}`}
             >
               <Icon aria-hidden="true" className="h-5 w-5" />
               <div className="min-w-0">
@@ -122,7 +123,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 type="button"
-                className="btn btn-ghost btn-xs btn-circle"
+                className="button button--ghost button--icon-only button--sm"
                 aria-label="Tutup notifikasi"
                 onClick={() => dismiss(t.id)}
               >
@@ -141,4 +142,3 @@ export function useToast() {
   if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
 }
-

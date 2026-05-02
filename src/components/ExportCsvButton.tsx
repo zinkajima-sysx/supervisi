@@ -38,7 +38,7 @@ export default function ExportCsvButton({
   rows,
   fileName,
   columns,
-  className = "btn btn-outline btn-sm",
+  className = "button button--outline button--sm",
 }: {
   rows: Record<string, any>[];
   fileName: string;
@@ -66,4 +66,3 @@ export default function ExportCsvButton({
     </button>
   );
 }
-

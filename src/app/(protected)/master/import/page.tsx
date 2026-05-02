@@ -24,13 +24,13 @@ function PreviewTable({ rows }: { rows: Record<string, string>[] }) {
   if (!rows.length) return null;
 
   return (
-    <div className="mt-5 rounded-2xl border border-base-content/10 bg-base-200/20 overflow-hidden">
+    <div className="mt-5 rounded-2xl border border-border bg-surface overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="table table-zebra w-full">
+        <table className="w-full text-sm">
           <thead>
-            <tr className="bg-base-200/50 border-b border-base-content/5">
+            <tr className="border-b border-border">
               {columns.map((c) => (
-                <th key={c} className="py-4 text-[10px] font-black uppercase tracking-[0.22em] text-primary/80">
+                <th key={c} className="py-4 px-4 text-left text-[10px] font-black uppercase tracking-[0.22em] text-foreground/60">
                   {c}
                 </th>
               ))}
@@ -38,9 +38,9 @@ function PreviewTable({ rows }: { rows: Record<string, string>[] }) {
           </thead>
           <tbody>
             {rows.map((r, idx) => (
-              <tr key={idx}>
+              <tr key={idx} className="border-b border-border last:border-b-0">
                 {columns.map((c) => (
-                  <td key={c} className="py-3 text-xs text-base-content/80">
+                  <td key={c} className="py-3 px-4 text-xs text-foreground/80">
                     <div className="min-w-0 break-words">{r[c] || "-"}</div>
                   </td>
                 ))}
@@ -101,44 +101,50 @@ function ImportCard({
   }
 
   return (
-    <div className="glass-card p-6">
+    <div className="rounded-3xl border border-border bg-surface shadow-xl p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-lg font-black tracking-tight text-base-content">{title}</div>
-          <div className="mt-1 text-sm font-medium text-base-content/60">{subtitle}</div>
+          <div className="text-lg font-black tracking-tight text-foreground">{title}</div>
+          <div className="mt-1 text-sm font-medium text-foreground/70">{subtitle}</div>
         </div>
-        <div className="h-12 w-12 rounded-3xl bg-base-200/60 border border-base-content/10 text-base-content flex items-center justify-center">
+        <div className="h-12 w-12 rounded-3xl bg-base-200 border border-border text-foreground flex items-center justify-center">
           <FileSpreadsheet aria-hidden="true" className="h-6 w-6" />
         </div>
       </div>
 
       <div className="mt-6 grid grid-cols-12 gap-4">
         <div className="col-span-12 lg:col-span-5">
-          <label htmlFor={`${idBase}-file`} className="label pb-2">
-            <span className="label-text text-xs font-black uppercase tracking-[0.22em] text-primary/80">File CSV</span>
+          <label
+            htmlFor={`${idBase}-file`}
+            className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60"
+          >
+            File CSV
           </label>
           <input
             id={`${idBase}-file`}
             name="file"
             type="file"
             accept=".csv,text/csv"
-            className="file-input file-input-bordered w-full rounded-2xl bg-base-200/40 border-base-content/10"
+            className="block w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-          <div className="mt-2 text-xs text-base-content/50">
+          <div className="mt-2 text-xs text-foreground/60">
             Upload CSV hasil export Excel (header bertingkat/merge).
           </div>
         </div>
 
         <div className="col-span-12 lg:col-span-4">
-          <label htmlFor={`${idBase}-sheet`} className="label pb-2">
-            <span className="label-text text-xs font-black uppercase tracking-[0.22em] text-primary/80">Nama Sheet</span>
+          <label
+            htmlFor={`${idBase}-sheet`}
+            className="block pb-2 text-xs font-black uppercase tracking-[0.22em] text-foreground/60"
+          >
+            Nama Sheet
           </label>
           <input
             id={`${idBase}-sheet`}
             name="sheet"
             autoComplete="off"
-            className="input input-bordered w-full h-12 rounded-2xl bg-base-200/40 border-base-content/10 focus:border-primary/30 focus:bg-base-100"
+            className="input w-full h-12 rounded-2xl px-4"
             value={sheet}
             onChange={(e) => setSheet(e.target.value)}
             placeholder="Contoh: Import_APD"
@@ -147,14 +153,14 @@ function ImportCard({
 
         <div className="col-span-12 lg:col-span-3 flex items-end gap-2">
           <button
-            className="btn btn-outline rounded-2xl flex-1"
+            className="button button--outline flex-1"
             disabled={!file || busy}
             onClick={() => runImport(false)}
           >
             {busy ? <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" /> : "Preview"}
           </button>
           <button
-            className="btn btn-primary rounded-2xl flex-1 shadow-lg shadow-primary/20"
+            className="button button--primary flex-1"
             disabled={!file || busy}
             onClick={() => runImport(true)}
           >
@@ -169,7 +175,7 @@ function ImportCard({
       </div>
 
       {error && (
-        <div role="alert" className="mt-5 rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-sm text-error">
+        <div role="alert" className="mt-5 rounded-2xl border border-error bg-error text-error-content px-4 py-3 text-sm">
           <div className="font-semibold">{error}</div>
         </div>
       )}
@@ -177,11 +183,19 @@ function ImportCard({
       {result && (
         <div className="mt-5">
           <div className="flex flex-wrap items-center gap-3">
-            <div className={`badge ${result.committed ? "badge-success" : "badge-ghost"} badge-lg font-bold`}>
+            <div
+              className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${
+                result.committed ? "bg-success text-success-content border-success" : "bg-base-200 text-base-content border-border"
+              }`}
+            >
               {result.committed ? "Tersimpan" : "Preview"}
             </div>
-            <div className="badge badge-outline badge-lg font-bold">{result.sheet}</div>
-            <div className="badge badge-outline badge-lg font-bold tabular-nums">{result.totalRows} baris</div>
+            <div className="inline-flex items-center rounded-full border border-border px-3 py-1 text-xs font-bold">
+              {result.sheet}
+            </div>
+            <div className="inline-flex items-center rounded-full border border-border px-3 py-1 text-xs font-bold tabular-nums">
+              {result.totalRows} baris
+            </div>
           </div>
           <PreviewTable rows={result.preview.slice(0, 10)} />
         </div>
@@ -194,8 +208,8 @@ export default function MasterImportPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="space-y-2">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight text-base-content">Import CSV</h1>
-        <p className="text-sm md:text-base text-base-content/60 font-medium max-w-3xl">
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground">Import CSV</h1>
+        <p className="text-sm md:text-base text-foreground/70 font-medium max-w-3xl">
           Sistem akan melakukan parsing multi-index sesuai aturan pada file kebutuhan (APD 3 header, P3K 2 header),
           lalu menghasilkan data datar (flat) untuk disimpan ke Google Sheet.
         </p>

@@ -11,8 +11,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@heroui/react": "^3.0.0",
+    "@heroui/styles": "^3.0.0",
     "bcryptjs": "^3.0.3",
-    "daisyui": "^5.5.19",
+    "cloudinary": "^2.10.0",
     "google-spreadsheet": "^5.2.0",
     "googleapis": "^171.4.0",
     "lucide-react": "^1.14.0",

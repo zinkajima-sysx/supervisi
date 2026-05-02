@@ -5,10 +5,13 @@ import { verifyCredentials } from "@/lib/users";
 
 const nextAuthUrl = String(process.env.NEXTAUTH_URL ?? "");
 const isLocalhostUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?($|\/)/i.test(nextAuthUrl);
+const isVercel = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_URL);
+const resolvedSecret =
+  process.env.NEXTAUTH_SECRET || (!isVercel ? "dev-supervisi-nextauth-secret" : "");
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
-  useSecureCookies: !isLocalhostUrl,
+  secret: resolvedSecret,
+  useSecureCookies: isVercel && !isLocalhostUrl,
   session: {
     strategy: "jwt",
   },

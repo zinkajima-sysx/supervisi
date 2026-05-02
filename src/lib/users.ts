@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
 
-import { getSpreadsheet } from "@/lib/google";
+import { getRows } from "@/lib/sheets";
 
-export type AppRole = "ADMIN" | "MANAGER" | "ASMEN" | "KEPALA_KLINIK";
+export type AppRole = "ADMIN" | "MANAGER" | "ASMEN" | "KEPALA_KLINIK" | "DOKTER_FUNGSIONAL";
 
 export type AppUser = {
   id: string;
@@ -50,19 +50,15 @@ function normalizeRole(value: string | undefined): AppRole | null {
   if (role === "MANAGER") return "MANAGER";
   if (role === "ASMEN") return "ASMEN";
   if (role === "KEPALA_KLINIK") return "KEPALA_KLINIK";
+  if (role === "DOKTER_FUNGSIONAL") return "DOKTER_FUNGSIONAL";
   return null;
 }
 
 export async function findUserByUsername(username: string): Promise<UserRow | null> {
-  const doc = await getSpreadsheet();
-  const sheet = doc.sheetsByTitle["Data_User"];
-  if (!sheet) {
-    throw new Error('Sheet "Data_User" not found');
-  }
-  const rows = await sheet.getRows<Record<string, string>>();
   const wanted = username.trim().toLowerCase();
+  const rows = await getRows("Data_User");
   const rowObj = rows
-    .map((r) => normalizeRowKeys(((r as any).toObject?.() ?? {}) as Record<string, unknown>))
+    .map((r) => normalizeRowKeys(r as Record<string, unknown>))
     .find((r) => (pickString(r, ["username"]) ?? "").trim().toLowerCase() === wanted);
   if (!rowObj) return null;
   return {

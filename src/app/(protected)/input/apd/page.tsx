@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
 import { APD_STATUS_OPTIONS } from "@/lib/options";
+import { uploadImageToCloudinary } from "@/lib/uploadImage";
 import { useToast } from "@/components/ToastProvider";
 
 type ApiRowsResponse = { rows: Record<string, string>[] };
+type StatusResponse = { belum: string[]; sudah: string[]; semester: number; year: number };
 
 type KlinikOption = { id: string; label: string };
 
@@ -78,7 +80,10 @@ export default function InputApdPage() {
   );
 
   const isKepalaKlinik = useMemo(
-    () => (session?.user?.role ?? "").toUpperCase() === "KEPALA_KLINIK",
+    () => {
+      const r = (session?.user?.role ?? "").toUpperCase();
+      return r === "KEPALA_KLINIK" || r === "DOKTER_FUNGSIONAL";
+    },
     [session?.user?.role]
   );
 
@@ -102,6 +107,7 @@ export default function InputApdPage() {
   const [catatan, setCatatan] = useState("");
   const [items, setItems] = useState<Record<string, string>>({});
   const [file, setFile] = useState<File | null>(null);
+  const [uptSudah, setUptSudah] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +145,23 @@ export default function InputApdPage() {
     setDaop("DAOP 2 BANDUNG");
   }, []);
 
+  // Fetch UPT yang sudah disupervisi semester ini (hanya untuk role terbatas)
+  useEffect(() => {
+    if (!isKepalaKlinik) return;
+    let cancelled = false;
+    const now = new Date();
+    const semester = now.getMonth() < 6 ? 1 : 2;
+    const year = now.getFullYear();
+    fetch(`/api/supervisi/status?type=apd&year=${year}&semester=${semester}`)
+      .then((r) => r.json())
+      .then((data: StatusResponse) => {
+        if (cancelled) return;
+        setUptSudah(new Set(data.sudah ?? []));
+      })
+      .catch(() => { if (!cancelled) setUptSudah(new Set()); });
+    return () => { cancelled = true; };
+  }, [isKepalaKlinik]);
+
   const visibleUptRows = useMemo(() => {
     if (!isScopedKlinik) return uptRows;
     const wilayah = wilayahKerja.trim().toLowerCase();
@@ -162,14 +185,29 @@ export default function InputApdPage() {
       const v = pick(r, ["upt", "nama_upt"]);
       if (v) s.add(v);
     }
-    return Array.from(s).sort();
-  }, [visibleUptRows, unitKerja]);
+    // Untuk KEPALA_KLINIK: sembunyikan UPT yang sudah disupervisi semester ini
+    return Array.from(s)
+      .filter((u) => !isKepalaKlinik || !uptSudah.has(u))
+      .sort();
+  }, [visibleUptRows, unitKerja, isKepalaKlinik, uptSudah]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setAlert(null);
     setIsSubmitting(true);
     try {
+      // Step 1: Upload foto langsung dari browser ke Cloudinary (jika ada)
+      // Ini jauh lebih cepat — tidak melalui server Next.js
+      let foto_url = "";
+      if (file) {
+        try {
+          foto_url = await uploadImageToCloudinary(file, "apd");
+        } catch (uploadErr) {
+          console.warn("[APD] Client-side upload gagal, lanjut tanpa foto:", uploadErr);
+        }
+      }
+
+      // Step 2: Kirim data form + foto_url ke API (tanpa file binary)
       const form = new FormData();
       form.set("tanggal_supervisi", tanggal);
       form.set("id_klinik", idKlinik);
@@ -179,19 +217,37 @@ export default function InputApdPage() {
       form.set("apd_lainnya", apdLainnya);
       form.set("kodisi_apd_lainnya", kodisiApdLainnya);
       form.set("catatan", catatan);
+      form.set("foto_url", foto_url);
       for (const group of APD_GROUPS) {
         for (const field of group.fields) {
           form.set(field.key, items[field.key] ?? "");
         }
       }
-      if (file) form.set("file", file);
 
-      const res = await fetch("/api/supervisi/apd", { method: "POST", body: form });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/supervisi/apd", {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
       if (!res.ok) {
-        setAlert({ type: "error", msg: "Gagal menyimpan data APD." });
-        toast.error("Gagal menyimpan data APD.", "Gagal");
+        let errMsg = "Gagal menyimpan data APD.";
+        try {
+          const errData = await res.json() as { error?: string };
+          if (errData?.error) errMsg = errData.error;
+        } catch { /* ignore */ }
+        setAlert({ type: "error", msg: errMsg });
+        toast.error(errMsg, "Gagal");
         return;
       }
+
       setAlert({ type: "success", msg: "Berhasil menyimpan data APD." });
       toast.success("Berhasil menyimpan data APD.", "Sukses");
       setIdKlinik("");
@@ -202,9 +258,12 @@ export default function InputApdPage() {
       setKodisiApdLainnya("");
       setItems({});
       setFile(null);
-    } catch {
-      setAlert({ type: "error", msg: "Terjadi error saat submit." });
-      toast.error("Terjadi error saat submit.", "Gagal");
+    } catch (err) {
+      const msg = err instanceof Error && err.name === "AbortError"
+        ? "Request timeout — koneksi terlalu lambat. Coba lagi."
+        : "Terjadi error saat submit.";
+      setAlert({ type: "error", msg });
+      toast.error(msg, "Gagal");
     } finally {
       setIsSubmitting(false);
     }
@@ -212,51 +271,63 @@ export default function InputApdPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-base-content to-base-content/60">
-            Supervisi APD
-          </h1>
-          <p className="text-sm font-medium text-base-content/50 max-w-md">
+          <h1 className="text-3xl font-black tracking-tight text-foreground">Supervisi APD</h1>
+          <p className="text-sm font-medium text-foreground/70 max-w-md">
             Dokumentasikan kondisi Alat Pelindung Diri sesuai standar K3 untuk memastikan keselamatan operasional.
           </p>
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 border-primary/10">
-            <div className="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
-            <span className="text-xs font-bold uppercase tracking-widest text-primary/80">
+          <div className="px-4 py-2 rounded-2xl flex items-center gap-3 border border-border bg-surface shadow">
+            <div className="h-2 w-2 rounded-full bg-primary"></div>
+            <span className="text-xs font-bold uppercase tracking-widest text-primary">
               {isScopedKlinik ? "Klinik Terkunci" : "Mode ALL"}
             </span>
             {isScopedKlinik && wilayahKerja && (
               <>
-                <div className="h-4 w-[1px] bg-base-content/10"></div>
-                <span className="text-xs font-black opacity-60">{wilayahKerja}</span>
+                <div className="h-4 w-[1px] bg-border"></div>
+                <span className="text-xs font-black text-foreground/70">{wilayahKerja}</span>
               </>
             )}
           </div>
+          {isKepalaKlinik && (
+            <div className="px-4 py-2 rounded-2xl flex items-center gap-3 border border-border bg-surface shadow">
+              <div className="h-2 w-2 rounded-full bg-warning"></div>
+              <span className="text-xs font-bold text-foreground/70">
+                Semester ini: <span className="text-success font-black">{uptSudah.size} selesai</span>
+                {daftarUpt.length > 0 && (
+                  <span className="text-warning font-black ml-1">· {daftarUpt.length} belum</span>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       {alert && (
-        <div className={`alert glass-panel border-none shadow-lg ${
-          alert.type === "success" 
-            ? "bg-success/10 text-success" 
-            : "bg-error/10 text-error"
-        } animate-in slide-in-from-top duration-300`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <div
+          className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl ${
+            alert.type === "success"
+              ? "bg-success text-success-content border-success"
+              : "bg-error text-error-content border-error"
+          } animate-in slide-in-from-top duration-300`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={alert.type === "success" ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
           </svg>
           <span className="font-semibold text-sm">{alert.msg}</span>
-          <button onClick={() => setAlert(null)} className="btn btn-ghost btn-xs btn-circle">✕</button>
+          <button onClick={() => setAlert(null)} className="button button--ghost button--icon-only button--sm rounded-full">
+            ✕
+          </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Form Content */}
         <div className="lg:col-span-8 space-y-6">
-          <form onSubmit={onSubmit} className="glass-card overflow-hidden">
+          <form onSubmit={onSubmit} className="rounded-3xl border border-border bg-surface shadow-xl overflow-hidden">
             <div className="p-1 bg-gradient-to-r from-primary/20 via-transparent to-kereta-orange/20"></div>
             <div className="p-6 md:p-8 space-y-8">
               
@@ -268,14 +339,14 @@ export default function InputApdPage() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Tanggal Inspeksi</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Tanggal Inspeksi
                     </label>
                     <div className="relative group">
                       <input
                         type="date"
-                        className="input w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl pl-10"
+                        className="input w-full rounded-xl pl-10"
                         value={tanggal}
                         onChange={(e) => setTanggal(e.target.value)}
                         required
@@ -286,12 +357,12 @@ export default function InputApdPage() {
                     </div>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Klinik</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Klinik
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={idKlinik}
                       onChange={(e) => setIdKlinik(e.target.value)}
                       disabled={isKepalaKlinik}
@@ -308,24 +379,24 @@ export default function InputApdPage() {
                     </select>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">DAOP</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      DAOP
                     </label>
                     <input
-                      className="input w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full rounded-xl px-4"
                       value="DAOP 2 BANDUNG"
                       disabled
                       readOnly
                     />
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Unit Kerja</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Unit Kerja
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={unitKerja}
                       onChange={(e) => {
                         setUnitKerja(e.target.value);
@@ -344,12 +415,12 @@ export default function InputApdPage() {
                     </select>
                   </div>
 
-                  <div className="form-control md:col-span-2">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">UPT</span>
+                  <div className="md:col-span-2">
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      UPT
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={upt}
                       onChange={(e) => setUpt(e.target.value)}
                       required
@@ -378,20 +449,18 @@ export default function InputApdPage() {
 
                 <div className="space-y-6">
                   {APD_GROUPS.map((group) => (
-                    <div key={group.title} className="rounded-3xl border border-base-content/5 bg-base-200/30 p-5">
-                      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-base-content/45">
+                    <div key={group.title} className="rounded-3xl border border-border bg-surface p-5">
+                      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-foreground/60">
                         {group.title}
                       </div>
                       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                         {group.fields.map((field) => (
-                          <div key={field.key} className="form-control">
-                            <label className="label px-1">
-                              <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">
-                                {field.label}
-                              </span>
+                          <div key={field.key}>
+                            <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                              {field.label}
                             </label>
                             <select
-                              className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                              className="input w-full h-12 rounded-xl px-3"
                               value={items[field.key] ?? ""}
                               onChange={(e) =>
                                 setItems((prev) => ({ ...prev, [field.key]: e.target.value }))
@@ -426,44 +495,44 @@ export default function InputApdPage() {
 
                 <div className="grid grid-cols-1 gap-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="form-control">
-                      <label className="label px-1">
-                        <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">APD Lainnya</span>
+                    <div>
+                      <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                        APD Lainnya
                       </label>
                       <input
-                        className="input w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                        className="input w-full rounded-xl px-4"
                         value={apdLainnya}
                         onChange={(e) => setApdLainnya(e.target.value)}
                         placeholder="Contoh: Jas hujan…"
                       />
                     </div>
-                    <div className="form-control">
-                      <label className="label px-1">
-                        <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Kondisi APD Lainnya</span>
+                    <div>
+                      <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                        Kondisi APD Lainnya
                       </label>
                       <input
-                        className="input w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                        className="input w-full rounded-xl px-4"
                         value={kodisiApdLainnya}
                         onChange={(e) => setKodisiApdLainnya(e.target.value)}
                         placeholder="Contoh: Sesuai standar…"
                       />
                     </div>
                   </div>
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Catatan Tambahan</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Catatan Tambahan
                     </label>
                     <textarea
-                      className="textarea w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-2xl min-h-[120px]"
+                      className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm min-h-[120px]"
                       value={catatan}
                       onChange={(e) => setCatatan(e.target.value)}
                       placeholder="Masukkan catatan temuan atau detail tambahan..."
                     />
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Foto Dokumentasi</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Foto Dokumentasi
                     </label>
                     <div className="flex flex-col items-center justify-center border-2 border-dashed border-base-content/10 rounded-2xl p-8 hover:bg-base-200/50 transition-all cursor-pointer relative">
                       <input
@@ -473,7 +542,7 @@ export default function InputApdPage() {
                         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                       />
                       <div className="flex flex-col items-center gap-3 text-center">
-                        <div className="p-4 bg-primary/10 rounded-2xl text-primary">
+                        <div className="p-4 bg-primary rounded-2xl text-primary-content">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -493,8 +562,8 @@ export default function InputApdPage() {
                 <div className="text-[10px] font-black uppercase tracking-widest opacity-30">
                   Semua data akan diverifikasi oleh auditor
                 </div>
-                <button 
-                  className={`btn btn-primary rounded-xl px-10 font-bold shadow-lg shadow-primary/20 ${isSubmitting ? 'loading' : ''}`} 
+                <button
+                  className="button button--primary button--lg rounded-xl px-10 font-bold"
                   disabled={isSubmitting} 
                   type="submit"
                 >
@@ -507,23 +576,23 @@ export default function InputApdPage() {
 
         {/* Sidebar Guidelines */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="glass-card p-6 space-y-4">
+          <div className="rounded-3xl border border-border bg-surface shadow-xl p-6 space-y-4">
             <h4 className="font-black text-xs uppercase tracking-[0.2em] opacity-40">Panduan Pengisian</h4>
             <ul className="space-y-4">
               <li className="flex gap-4">
-                <div className="h-6 w-6 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0 text-xs font-bold">1</div>
+                <div className="h-6 w-6 rounded-lg bg-success text-success-content flex items-center justify-center shrink-0 text-xs font-bold">1</div>
                 <p className="text-sm opacity-70 leading-relaxed">
                   Pilih <span className="font-bold text-base-content">Tanggal</span> dan <span className="font-bold text-base-content">UPT</span> tempat dilakukannya supervisi.
                 </p>
               </li>
               <li className="flex gap-4">
-                <div className="h-6 w-6 rounded-lg bg-warning/10 text-warning flex items-center justify-center shrink-0 text-xs font-bold">2</div>
+                <div className="h-6 w-6 rounded-lg bg-warning text-warning-content flex items-center justify-center shrink-0 text-xs font-bold">2</div>
                 <p className="text-sm opacity-70 leading-relaxed">
                   Periksa kondisi fisik APD, pastikan tidak ada kerusakan yang membahayakan.
                 </p>
               </li>
               <li className="flex gap-4">
-                <div className="h-6 w-6 rounded-lg bg-info/10 text-info flex items-center justify-center shrink-0 text-xs font-bold">3</div>
+                <div className="h-6 w-6 rounded-lg bg-info text-info-content flex items-center justify-center shrink-0 text-xs font-bold">3</div>
                 <p className="text-sm opacity-70 leading-relaxed">
                   Unggah <span className="font-bold text-base-content">Foto</span> jika terdapat temuan khusus atau untuk bukti dokumentasi.
                 </p>
@@ -531,10 +600,10 @@ export default function InputApdPage() {
             </ul>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl bg-gradient-to-br from-primary/10 to-transparent border-primary/10">
+          <div className="p-6 rounded-3xl border border-border bg-surface shadow">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-primary/20 rounded-xl">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="p-2 bg-primary rounded-xl">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary-content" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>

@@ -167,7 +167,7 @@ export async function GET(request: Request) {
   const wilayahKerja = String(user.wilayahKerja ?? "").trim();
 
   let scopedIdKlinik: string | null = null;
-  if (role === "KEPALA_KLINIK" && wilayahKerja && wilayahKerja.toUpperCase() !== "ALL") {
+  if ((role === "KEPALA_KLINIK" || role === "DOKTER_FUNGSIONAL") && wilayahKerja && wilayahKerja.toUpperCase() !== "ALL") {
     const found = (klinikRaw as any[]).find(
       (r) => normalize(String(r.klinik ?? "")) === normalize(wilayahKerja)
     );

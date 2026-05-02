@@ -10,7 +10,7 @@ export default function LogoutButton({
   children?: React.ReactNode;
 }) {
   return (
-    <button className={className ?? "btn btn-ghost btn-sm"} onClick={() => signOut()}>
+    <button className={className ?? "button button--ghost button--sm"} onClick={() => signOut()}>
       {children ?? "Logout"}
     </button>
   );

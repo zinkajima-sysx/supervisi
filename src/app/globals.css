@@ -1,107 +1,76 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@import "@heroui/styles";
 
 @theme {
   --font-sans: "Plus Jakarta Sans", var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
+  /* Radius dikecilkan ~30% dari semula */
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
   --color-kereta-blue: #0a2e56;
   --color-kereta-orange: #f59e0b;
   --color-kereta-white: #ffffff;
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
 @layer base {
   :root {
-    --glass-bg: rgba(255, 255, 255, 0.82);
-    --glass-border: rgba(15, 23, 42, 0.08);
-    --glass-shadow: 0 24px 70px -40px rgba(15, 23, 42, 0.22);
-    --brand-blue: #0a2e56;
-    --brand-orange: #f59e0b;
-    --brand-white: #ffffff;
-  }
-
-  [data-theme="dark"] {
-    --glass-bg: rgba(15, 23, 42, 0.72);
-    --glass-border: rgba(255, 255, 255, 0.11);
+    --accent: #0a2e56;
+    --accent-foreground: #ffffff;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased selection:bg-[#0a2e56]/20;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    background-image: radial-gradient(circle at top left, rgba(10, 46, 86, 0.09), transparent 24%), radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.1), transparent 28%);
-  }
-
-  html {
-    scroll-behavior: smooth;
   }
 }
 
-@utility glass-panel {
-  backdrop-filter: blur(20px);
-  background-color: var(--glass-bg);
-  border-color: var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  border-width: 1px;
-}
-
-@utility glass-card {
-  @apply glass-panel transition-all duration-300;
-  border-radius: 1.5rem;
-}
-
-@utility glass-navbar {
-  @apply sticky top-0 z-50;
-  backdrop-filter: blur(14px);
-  background-color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(15, 23, 42, 0.08);
-  border-bottom-width: 1px;
-}
-
-@utility brand-card {
-  @apply rounded-[2rem] bg-white/95 border border-slate-200/70 shadow-[0_25px_55px_-28px_rgba(15,23,42,0.22)];
-}
-
-@utility brand-panel {
-  @apply rounded-3xl bg-white/90 border border-slate-200/60 backdrop-blur-xl shadow-xl;
-}
-
-@utility brand-pill {
-  @apply inline-flex items-center gap-2 rounded-full bg-[#0a2e56]/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.28em] text-[#0a2e56];
-}
-
-@utility bento-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  @media (min-width: 768px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@layer base {
+  * {
+    backdrop-filter: none !important;
   }
-  @media (min-width: 1024px) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+
+  :where([class*="bg-"][class*="/"]),
+  :where([class*="bg-opacity-"]) {
+    --tw-bg-opacity: 1 !important;
   }
-}
 
-@utility btn-premium {
-  position: relative;
-  overflow: hidden;
-  transition-property: all;
-  transition-duration: 300ms;
-}
+  :where([class*="text-"][class*="/"]),
+  :where([class*="text-opacity-"]) {
+    --tw-text-opacity: 1 !important;
+  }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
+  :where([class*="border-"][class*="/"]),
+  :where([class*="border-opacity-"]) {
+    --tw-border-opacity: 1 !important;
+  }
 
-::-webkit-scrollbar-track {
-  @apply bg-transparent;
-}
+  :where([class*="ring-"][class*="/"]),
+  :where([class*="ring-opacity-"]) {
+    --tw-ring-opacity: 1 !important;
+  }
 
-::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full border-4 border-transparent bg-clip-content hover:bg-slate-400/70;
+  :where([class*="placeholder-"][class*="/"]),
+  :where([class*="placeholder-opacity-"]) {
+    --tw-placeholder-opacity: 1 !important;
+  }
+
+  :where([class*="divide-"][class*="/"]),
+  :where([class*="divide-opacity-"]) {
+    --tw-divide-opacity: 1 !important;
+  }
+
+  :where([class*="from-"][class*="/"]) {
+    --tw-gradient-from-opacity: 1 !important;
+  }
+
+  :where([class*="via-"][class*="/"]) {
+    --tw-gradient-via-opacity: 1 !important;
+  }
+
+  :where([class*="to-"][class*="/"]) {
+    --tw-gradient-to-opacity: 1 !important;
+  }
 }

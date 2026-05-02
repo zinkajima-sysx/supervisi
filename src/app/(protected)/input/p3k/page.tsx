@@ -8,9 +8,11 @@ import {
   KONDISI_KOTAK_OPTIONS,
   P3K_ITEM_OPTIONS,
 } from "@/lib/options";
+import { uploadImageToCloudinary } from "@/lib/uploadImage";
 import { useToast } from "@/components/ToastProvider";
 
 type ApiRowsResponse = { rows: Record<string, string>[] };
+type StatusResponse = { belum: string[]; sudah: string[]; semester: number; year: number };
 
 type KlinikOption = { id: string; label: string };
 
@@ -26,7 +28,7 @@ const P3K_ITEMS: Array<{ key: string; label: string }> = [
   { key: "kasa_steril", label: "Kasa Steril" },
   { key: "perban_5cm", label: "Perban 5 cm" },
   { key: "perban_10cm", label: "Perban 10 cm" },
-  { key: "perban_1,2cm", label: "Perban 1,2 cm" },
+  { key: "perban_1.2cm", label: "Perban 1,2 cm" },
   { key: "plester_cepat", label: "Plester Cepat" },
   { key: "kapas_25gram", label: "Kapas 25 gram" },
   { key: "kain_mitela", label: "Kain Mitela" },
@@ -58,7 +60,10 @@ export default function InputP3kPage() {
   );
 
   const isKepala = useMemo(
-    () => (session?.user?.role ?? "").toUpperCase() === "KEPALA_KLINIK",
+    () => {
+      const r = (session?.user?.role ?? "").toUpperCase();
+      return r === "KEPALA_KLINIK" || r === "DOKTER_FUNGSIONAL";
+    },
     [session?.user?.role]
   );
 
@@ -84,6 +89,7 @@ export default function InputP3kPage() {
   const [tindakLanjut, setTindakLanjut] = useState("");
   const [items, setItems] = useState<Record<string, string>>({});
   const [file, setFile] = useState<File | null>(null);
+  const [uptSudah, setUptSudah] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +127,23 @@ export default function InputP3kPage() {
     setDaop("DAOP 2 BANDUNG");
   }, []);
 
+  // Fetch UPT yang sudah disupervisi semester ini (hanya untuk role terbatas)
+  useEffect(() => {
+    if (!isKepala) return;
+    let cancelled = false;
+    const now = new Date();
+    const semester = now.getMonth() < 6 ? 1 : 2;
+    const year = now.getFullYear();
+    fetch(`/api/supervisi/status?type=p3k&year=${year}&semester=${semester}`)
+      .then((r) => r.json())
+      .then((data: StatusResponse) => {
+        if (cancelled) return;
+        setUptSudah(new Set(data.sudah ?? []));
+      })
+      .catch(() => { if (!cancelled) setUptSudah(new Set()); });
+    return () => { cancelled = true; };
+  }, [isKepala]);
+
   const visibleUptRows = useMemo(() => {
     if (!isScopedKlinik) return uptRows;
     const wilayah = wilayahKerja.trim().toLowerCase();
@@ -144,14 +167,28 @@ export default function InputP3kPage() {
       const v = pick(r, ["upt", "nama_upt"]);
       if (v) s.add(v);
     }
-    return Array.from(s).sort();
-  }, [visibleUptRows, unitKerja]);
+    // Untuk KEPALA_KLINIK: sembunyikan UPT yang sudah disupervisi semester ini
+    return Array.from(s)
+      .filter((u) => !isKepala || !uptSudah.has(u))
+      .sort();
+  }, [visibleUptRows, unitKerja, isKepala, uptSudah]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setAlert(null);
     setIsSubmitting(true);
     try {
+      // Step 1: Upload foto langsung dari browser ke Cloudinary (jika ada)
+      let foto_url = "";
+      if (file) {
+        try {
+          foto_url = await uploadImageToCloudinary(file, "p3k");
+        } catch (uploadErr) {
+          console.warn("[P3K] Client-side upload gagal, lanjut tanpa foto:", uploadErr);
+        }
+      }
+
+      // Step 2: Kirim data form + foto_url ke API (tanpa file binary)
       const form = new FormData();
       form.set("tanggal_supervisi", tanggal);
       form.set("id_klinik", idKlinik);
@@ -166,14 +203,32 @@ export default function InputP3kPage() {
       form.set("hasil_pemeriksaan", hasilPemeriksaan);
       form.set("keterangan", keterangan);
       form.set("tindak_lanjut", tindakLanjut);
-      if (file) form.set("file", file);
+      form.set("foto_url", foto_url);
 
-      const res = await fetch("/api/supervisi/p3k", { method: "POST", body: form });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/supervisi/p3k", {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
       if (!res.ok) {
-        setAlert({ type: "error", msg: "Gagal menyimpan data P3K." });
-        toast.error("Gagal menyimpan data P3K.", "Gagal");
+        let errMsg = "Gagal menyimpan data P3K.";
+        try {
+          const errData = await res.json() as { error?: string };
+          if (errData?.error) errMsg = errData.error;
+        } catch { /* ignore */ }
+        setAlert({ type: "error", msg: errMsg });
+        toast.error(errMsg, "Gagal");
         return;
       }
+
       setAlert({ type: "success", msg: "Berhasil menyimpan data P3K." });
       toast.success("Berhasil menyimpan data P3K.", "Sukses");
       setIdKlinik("");
@@ -186,9 +241,12 @@ export default function InputP3kPage() {
       setTindakLanjut("");
       setItems({});
       setFile(null);
-    } catch {
-      setAlert({ type: "error", msg: "Terjadi error saat submit." });
-      toast.error("Terjadi error saat submit.", "Gagal");
+    } catch (err) {
+      const msg = err instanceof Error && err.name === "AbortError"
+        ? "Request timeout — koneksi terlalu lambat. Coba lagi."
+        : "Terjadi error saat submit.";
+      setAlert({ type: "error", msg });
+      toast.error(msg, "Gagal");
     } finally {
       setIsSubmitting(false);
     }
@@ -196,51 +254,63 @@ export default function InputP3kPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-base-content to-base-content/60">
-            Supervisi P3K
-          </h1>
-          <p className="text-sm font-medium text-base-content/50 max-w-md">
+          <h1 className="text-3xl font-black tracking-tight text-foreground">Supervisi P3K</h1>
+          <p className="text-sm font-medium text-foreground/70 max-w-md">
             Audit ketersediaan dan kelayakan Kotak P3K di setiap unit kerja untuk menjamin kesiapsiagaan medis.
           </p>
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 border-primary/10">
-            <div className="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
-            <span className="text-xs font-bold uppercase tracking-widest text-primary/80">
+          <div className="px-4 py-2 rounded-2xl flex items-center gap-3 border border-border bg-surface shadow">
+            <div className="h-2 w-2 rounded-full bg-primary"></div>
+            <span className="text-xs font-bold uppercase tracking-widest text-primary">
               {isScopedKlinik ? "Klinik Terkunci" : "Mode ALL"}
             </span>
             {isScopedKlinik && wilayahKerja && (
               <>
-                <div className="h-4 w-[1px] bg-base-content/10"></div>
-                <span className="text-xs font-black opacity-60">{wilayahKerja}</span>
+                <div className="h-4 w-[1px] bg-border"></div>
+                <span className="text-xs font-black text-foreground/70">{wilayahKerja}</span>
               </>
             )}
           </div>
+          {isKepala && (
+            <div className="px-4 py-2 rounded-2xl flex items-center gap-3 border border-border bg-surface shadow">
+              <div className="h-2 w-2 rounded-full bg-warning"></div>
+              <span className="text-xs font-bold text-foreground/70">
+                Semester ini: <span className="text-success font-black">{uptSudah.size} selesai</span>
+                {daftarUpt.length > 0 && (
+                  <span className="text-warning font-black ml-1">· {daftarUpt.length} belum</span>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       {alert && (
-        <div className={`alert glass-panel border-none shadow-lg ${
-          alert.type === "success" 
-            ? "bg-success/10 text-success" 
-            : "bg-error/10 text-error"
-        } animate-in slide-in-from-top duration-300`}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <div
+          className={`flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-xl ${
+            alert.type === "success"
+              ? "bg-success text-success-content border-success"
+              : "bg-error text-error-content border-error"
+          } animate-in slide-in-from-top duration-300`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={alert.type === "success" ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
           </svg>
           <span className="font-semibold text-sm">{alert.msg}</span>
-          <button onClick={() => setAlert(null)} className="btn btn-ghost btn-xs btn-circle">✕</button>
+          <button onClick={() => setAlert(null)} className="button button--ghost button--icon-only button--sm rounded-full">
+            ✕
+          </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Form Content */}
         <div className="lg:col-span-8 space-y-6">
-          <form onSubmit={onSubmit} className="glass-card overflow-hidden">
+          <form onSubmit={onSubmit} className="rounded-3xl border border-border bg-surface shadow-xl overflow-hidden">
             <div className="p-1 bg-gradient-to-r from-primary/20 via-transparent to-kereta-orange/20"></div>
             <div className="p-6 md:p-8 space-y-8">
               
@@ -252,25 +322,25 @@ export default function InputP3kPage() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Tanggal Supervisi</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Tanggal Supervisi
                     </label>
                     <input
                       type="date"
-                      className="input w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full rounded-xl px-4"
                       value={tanggal}
                       onChange={(e) => setTanggal(e.target.value)}
                       required
                     />
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Klinik</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Klinik
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={idKlinik}
                       onChange={(e) => setIdKlinik(e.target.value)}
                       disabled={isKepala}
@@ -287,24 +357,24 @@ export default function InputP3kPage() {
                     </select>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">DAOP</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      DAOP
                     </label>
                     <input
-                      className="input w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full rounded-xl px-4"
                       value="DAOP 2 BANDUNG"
                       disabled
                       readOnly
                     />
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Unit Kerja</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Unit Kerja
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={unitKerja}
                       onChange={(e) => {
                         setUnitKerja(e.target.value);
@@ -323,12 +393,12 @@ export default function InputP3kPage() {
                     </select>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">UPT</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      UPT
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={upt}
                       onChange={(e) => setUpt(e.target.value)}
                       required
@@ -356,12 +426,12 @@ export default function InputP3kPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Kelas Kotak P3K</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Kelas Kotak P3K
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={kelasKotak}
                       onChange={(e) => setKelasKotak(e.target.value)}
                       required
@@ -373,12 +443,12 @@ export default function InputP3kPage() {
                     </select>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Kondisi Fisik Kotak</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Kondisi Fisik Kotak
                     </label>
                     <select
-                      className="select w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-xl"
+                      className="input w-full h-12 rounded-xl px-3"
                       value={kondisiKotak}
                       onChange={(e) => setKondisiKotak(e.target.value)}
                       required
@@ -403,13 +473,13 @@ export default function InputP3kPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {P3K_ITEMS.map((item) => (
-                    <div key={item.key} className="form-control">
-                      <label className="label px-1">
-                        <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">{item.label}</span>
+                    <div key={item.key}>
+                      <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                        {item.label}
                       </label>
                       <select
-                        className={`select w-full bg-base-200/50 border-base-content/5 focus:bg-base-100 transition-all rounded-xl ${
-                          items[item.key] === "LENGKAP" ? "text-success border-success/20" : 
+                        className={`input w-full h-12 rounded-xl px-3 ${
+                          items[item.key] === "LENGKAP" ? "text-success border-success/20" :
                           items[item.key] === "TIDAK LENGKAP" ? "text-error border-error/20" : ""
                         }`}
                         value={items[item.key] ?? ""}
@@ -438,12 +508,12 @@ export default function InputP3kPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Kesimpulan Supervisi</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Kesimpulan Supervisi
                     </label>
                     <select
-                      className={`select w-full bg-base-200/50 border-base-content/5 focus:bg-base-100 transition-all rounded-xl ${
+                      className={`input w-full h-12 rounded-xl px-3 ${
                         hasilPemeriksaan === "LENGKAP" ? "bg-success/10 text-success border-success/30 font-bold" :
                         hasilPemeriksaan === "TIDAK LENGKAP" ? "bg-error/10 text-error border-error/30 font-bold" : ""
                       }`}
@@ -458,36 +528,36 @@ export default function InputP3kPage() {
                     </select>
                   </div>
 
-                  <div className="form-control">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Foto Kotak P3K</span>
+                  <div>
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Foto Kotak P3K
                     </label>
                     <input
                       type="file"
-                      className="file-input file-input-bordered w-full bg-base-200/50 rounded-xl"
+                      className="block w-full rounded-xl border border-border bg-surface px-4 py-2 text-sm"
                       accept="image/*"
                       onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                     />
                   </div>
 
-                  <div className="form-control md:col-span-2">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Keterangan Tambahan</span>
+                  <div className="md:col-span-2">
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Keterangan Tambahan
                     </label>
                     <textarea
-                      className="textarea w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-2xl min-h-[80px]"
+                      className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm min-h-[80px]"
                       value={keterangan}
                       onChange={(e) => setKeterangan(e.target.value)}
                       placeholder="Detail kondisi item atau catatan khusus..."
                     />
                   </div>
 
-                  <div className="form-control md:col-span-2">
-                    <label className="label px-1">
-                      <span className="label-text font-black text-primary/80 uppercase text-[10px] tracking-widest">Rencana Tindak Lanjut</span>
+                  <div className="md:col-span-2">
+                    <label className="block px-1 pb-2 text-[10px] font-black uppercase tracking-widest text-foreground/60">
+                      Rencana Tindak Lanjut
                     </label>
                     <textarea
-                      className="textarea w-full bg-base-200/50 border-base-content/5 focus:border-primary/30 focus:bg-base-100 transition-all rounded-2xl min-h-[80px]"
+                      className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm min-h-[80px]"
                       value={tindakLanjut}
                       onChange={(e) => setTindakLanjut(e.target.value)}
                       placeholder="Langkah perbaikan untuk item yang tidak lengkap..."
@@ -497,8 +567,8 @@ export default function InputP3kPage() {
               </section>
 
               <div className="flex items-center justify-end pt-6">
-                <button 
-                  className={`btn btn-primary rounded-xl px-12 font-bold shadow-lg shadow-primary/20 ${isSubmitting ? 'loading' : ''}`} 
+                <button
+                  className="button button--primary button--lg rounded-xl px-12 font-bold"
                   disabled={isSubmitting} 
                   type="submit"
                 >
@@ -511,7 +581,7 @@ export default function InputP3kPage() {
 
         {/* Info Panel */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="glass-card p-6 space-y-6">
+          <div className="rounded-3xl border border-border bg-surface shadow-xl p-6 space-y-6">
             <div>
               <h4 className="font-black text-[10px] uppercase tracking-[0.2em] opacity-40 mb-4">Statistik Unit</h4>
               <div className="space-y-3">
@@ -534,7 +604,7 @@ export default function InputP3kPage() {
               </div>
             </div>
 
-            <div className="divider opacity-5"></div>
+            <div className="h-px bg-border opacity-50"></div>
 
             <div>
               <h4 className="font-black text-[10px] uppercase tracking-[0.2em] opacity-40 mb-4">Ketentuan Kelas</h4>
@@ -555,7 +625,7 @@ export default function InputP3kPage() {
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl bg-kereta-orange/10 border-kereta-orange/10">
+          <div className="p-6 rounded-3xl border border-border bg-surface shadow">
             <h4 className="font-bold text-sm text-kereta-orange mb-2">Penting!</h4>
             <p className="text-[11px] opacity-70 leading-relaxed italic">
               "Ketersediaan alat P3K yang lengkap dapat menyelamatkan nyawa pada menit-menit kritis pertama saat terjadi kecelakaan kerja."
